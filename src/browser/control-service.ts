@@ -22,6 +22,20 @@ export function createBrowserControlContext() {
   });
 }
 
+export function getCaptchaSolverConfig(): {
+  provider: "2captcha" | "capsolver";
+  apiKey: string;
+} | null {
+  if (!state?.resolved.stealth.captcha) {
+    return null;
+  }
+  const { provider, apiKey } = state.resolved.stealth.captcha;
+  if (!provider || !apiKey) {
+    return null;
+  }
+  return { provider, apiKey };
+}
+
 export async function startBrowserControlServiceFromConfig(): Promise<BrowserServerState | null> {
   if (state) {
     return state;
