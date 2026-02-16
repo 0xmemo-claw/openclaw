@@ -12,6 +12,11 @@ import { fileURLToPath } from "node:url";
 import type { WebSocketServer } from "ws";
 import { resolveAgentAvatar } from "../agents/identity-avatar.js";
 import {
+  getBrowserControlState,
+  startBrowserControlServiceFromConfig,
+  stopBrowserControlService,
+} from "../browser/control-service.js";
+import {
   A2UI_PATH,
   CANVAS_HOST_PATH,
   CANVAS_WS_PATH,
@@ -117,16 +122,13 @@ function resolveVncRoutePath(controlUiBasePath: string, suffix = ""): string {
 }
 
 function resolveBundledNoVncRoot(): string | null {
+  // Prefer vendor/novnc/core (ESM source, browser-compatible) over npm package (CJS)
+  const moduleDir = path.dirname(fileURLToPath(import.meta.url));
   const candidates = [
+    path.resolve(moduleDir, "..", "..", "vendor", "novnc"),
+    path.resolve(process.cwd(), "vendor", "novnc"),
     path.resolve(process.cwd(), "node_modules", "@novnc", "novnc"),
-    path.resolve(
-      path.dirname(fileURLToPath(import.meta.url)),
-      "..",
-      "..",
-      "node_modules",
-      "@novnc",
-      "novnc",
-    ),
+    path.resolve(moduleDir, "..", "..", "node_modules", "@novnc", "novnc"),
   ];
   for (const candidate of candidates) {
     if (fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()) {
@@ -542,6 +544,7 @@ export function createGatewayHttpServer(opts: {
         void handleRequest(req, res);
       });
   const vncViewerPath = resolveVncRoutePath(controlUiBasePath);
+  const vncApiPrefix = resolveVncRoutePath(controlUiBasePath, "/api/");
   const vncAssetsPrefix = resolveVncRoutePath(controlUiBasePath, "/novnc/");
   const noVncRoot = vncEnabled ? resolveBundledNoVncRoot() : null;
 
@@ -619,6 +622,7 @@ export function createGatewayHttpServer(opts: {
         vncEnabled &&
         (requestPath === vncViewerPath ||
           requestPath === `${vncViewerPath}/` ||
+          requestPath.startsWith(vncApiPrefix) ||
           requestPath.startsWith(vncAssetsPrefix))
       ) {
         const ok = await authorizeMachineScopedRequest({
@@ -633,11 +637,63 @@ export function createGatewayHttpServer(opts: {
           return;
         }
 
-        if (requestPath === vncViewerPath || requestPath === `${vncViewerPath}/`) {
+        if (requestPath === vncViewerPath) {
+          // Redirect /vnc to /vnc/ so relative imports resolve correctly
+          const qs = req.url?.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
+          res.writeHead(301, { Location: `${vncViewerPath}/${qs}` });
+          res.end();
+          return;
+        }
+        if (requestPath === `${vncViewerPath}/`) {
           res.statusCode = 200;
           res.setHeader("Content-Type", "text/html; charset=utf-8");
           res.setHeader("Cache-Control", "no-cache");
           res.end(VNC_VIEWER_HTML);
+          return;
+        }
+
+        // Browser control API: /vnc/api/{status,start,stop,restart}
+        if (requestPath.startsWith(vncApiPrefix)) {
+          const action = requestPath.slice(vncApiPrefix.length).replace(/\/+$/, "");
+          res.setHeader("Content-Type", "application/json; charset=utf-8");
+          res.setHeader("Cache-Control", "no-cache");
+          try {
+            if (action === "status") {
+              const st = getBrowserControlState();
+              res.statusCode = 200;
+              res.end(
+                JSON.stringify({
+                  running: !!st,
+                  pid: st?.pid ?? null,
+                  cdpPort: st?.cdpPort ?? null,
+                  cdpReady: !!st?.cdpHttp,
+                  profile: st?.profile ?? null,
+                  tabs: st?.tabs?.length ?? 0,
+                }),
+              );
+            } else if (action === "restart" && req.method === "POST") {
+              await stopBrowserControlService();
+              const st = await startBrowserControlServiceFromConfig();
+              res.statusCode = 200;
+              res.end(JSON.stringify({ ok: true, running: !!st }));
+            } else if (action === "stop" && req.method === "POST") {
+              await stopBrowserControlService();
+              res.statusCode = 200;
+              res.end(JSON.stringify({ ok: true, running: false }));
+            } else if (action === "start" && req.method === "POST") {
+              const st = await startBrowserControlServiceFromConfig();
+              res.statusCode = 200;
+              res.end(JSON.stringify({ ok: true, running: !!st }));
+            } else {
+              res.statusCode = 404;
+              res.end(JSON.stringify({ error: "Unknown action" }));
+            }
+          } catch (err: unknown) {
+            res.statusCode = 500;
+            res.end(
+              JSON.stringify({ error: err instanceof Error ? err.message : "Internal error" }),
+            );
+          }
           return;
         }
 
@@ -732,6 +788,7 @@ export function createGatewayHttpServer(opts: {
 export function attachGatewayUpgradeHandler(opts: {
   httpServer: HttpServer;
   wss: WebSocketServer;
+  vncWss: WebSocketServer | null;
   canvasHost: CanvasHostHandler | null;
   clients: Set<GatewayWsClient>;
   controlUiBasePath: string;
@@ -745,6 +802,7 @@ export function attachGatewayUpgradeHandler(opts: {
   const {
     httpServer,
     wss,
+    vncWss,
     canvasHost,
     clients,
     controlUiBasePath,
@@ -761,19 +819,8 @@ export function attachGatewayUpgradeHandler(opts: {
       const configSnapshot = loadConfig();
       const trustedProxies = configSnapshot.gateway?.trustedProxies ?? [];
       if (vncEnabled && url.pathname === vncWsPath) {
-        const ok = await authorizeMachineScopedRequest({
-          req,
-          auth: resolvedAuth,
-          trustedProxies,
-          clients,
-          rateLimiter,
-        });
-        if (!ok.ok) {
-          writeUpgradeAuthFailure(socket, ok);
-          socket.destroy();
-          return;
-        }
-        wss.handleUpgrade(req, socket, head, (ws) => {
+        // No extra auth — gateway already gates /vnc/* access
+        (vncWss ?? wss).handleUpgrade(req, socket, head, (ws) => {
           attachVncProxy(ws, req, {
             vncPort,
             log:
