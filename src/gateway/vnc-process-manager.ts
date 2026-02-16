@@ -97,8 +97,17 @@ export class VncProcessManager {
     const display = `:${this.displayNumber}`;
     const lockFile = `/tmp/.X${this.displayNumber}-lock`;
 
-    // Clean up stale lock file
+    // If Xvfb is already running externally on this display, reuse it
     if (existsSync(lockFile)) {
+      try {
+        const pid = execSync(`cat ${lockFile}`, { stdio: "pipe" }).toString().trim();
+        if (pid && existsSync(`/proc/${pid}`)) {
+          this.log.info(`Reusing existing Xvfb on ${display} (PID ${pid})`);
+          return true;
+        }
+      } catch {
+        // stale lock, clean up below
+      }
       try {
         execSync(`rm -f ${lockFile}`, { stdio: "pipe" });
       } catch {
@@ -182,8 +191,6 @@ export class VncProcessManager {
         "-repeat",
         "-cursor",
         "arrow",
-        "-pipeinput",
-        "UINPUT",
       ],
       {
         stdio: "pipe",

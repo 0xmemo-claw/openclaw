@@ -163,10 +163,14 @@ export async function createGatewayRuntimeState(params: {
     noServer: true,
     maxPayload: MAX_PAYLOAD_BYTES,
   });
+  const vncWss = params.vncEnabled
+    ? new WebSocketServer({ noServer: true, maxPayload: 8 * 1024 * 1024 })
+    : null;
   for (const server of httpServers) {
     attachGatewayUpgradeHandler({
       httpServer: server,
       wss,
+      vncWss,
       canvasHost,
       clients,
       controlUiBasePath: params.controlUiBasePath,
