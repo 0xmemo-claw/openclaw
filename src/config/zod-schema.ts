@@ -576,6 +576,18 @@ export const OpenClawSchema = z
           })
           .strict()
           .optional(),
+        browser: z
+          .object({
+            vnc: z
+              .object({
+                enabled: z.boolean().optional(),
+                vncPort: z.number().int().positive().optional(),
+              })
+              .strict()
+              .optional(),
+          })
+          .strict()
+          .optional(),
       })
       .strict()
       .optional(),

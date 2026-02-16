@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import {
   createServer as createHttpServer,
   type Server as HttpServer,
@@ -5,7 +6,9 @@ import {
   type ServerResponse,
 } from "node:http";
 import { createServer as createHttpsServer } from "node:https";
+import path from "node:path";
 import type { TlsOptions } from "node:tls";
+import { fileURLToPath } from "node:url";
 import type { WebSocketServer } from "ws";
 import { resolveAgentAvatar } from "../agents/identity-avatar.js";
 import {
@@ -55,6 +58,8 @@ import { handleOpenAiHttpRequest } from "./openai-http.js";
 import { handleOpenResponsesHttpRequest } from "./openresponses-http.js";
 import type { GatewayWsClient } from "./server/ws-types.js";
 import { handleToolsInvokeHttpRequest } from "./tools-invoke-http.js";
+import { attachVncProxy } from "./vnc-proxy.js";
+import { VNC_VIEWER_HTML } from "./vnc-viewer.js";
 
 type SubsystemLogger = ReturnType<typeof createSubsystemLogger>;
 type HookAuthFailure = { count: number; windowStartedAtMs: number };
@@ -106,7 +111,69 @@ function hasAuthorizedWsClientForIp(clients: Set<GatewayWsClient>, clientIp: str
   return false;
 }
 
-async function authorizeCanvasRequest(params: {
+function resolveVncRoutePath(controlUiBasePath: string, suffix = ""): string {
+  const base = controlUiBasePath ? `${controlUiBasePath}/vnc` : "/vnc";
+  return `${base}${suffix}`;
+}
+
+function resolveBundledNoVncRoot(): string | null {
+  const candidates = [
+    path.resolve(process.cwd(), "node_modules", "@novnc", "novnc"),
+    path.resolve(
+      path.dirname(fileURLToPath(import.meta.url)),
+      "..",
+      "..",
+      "node_modules",
+      "@novnc",
+      "novnc",
+    ),
+  ];
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function isSafeNoVncAssetPath(rel: string): boolean {
+  if (!rel || rel.includes("\0")) {
+    return false;
+  }
+  const normalized = path.posix.normalize(rel);
+  return !(normalized.startsWith("../") || normalized === "..");
+}
+
+function contentTypeForPath(filePath: string): string {
+  const ext = path.extname(filePath).toLowerCase();
+  switch (ext) {
+    case ".js":
+      return "application/javascript; charset=utf-8";
+    case ".css":
+      return "text/css; charset=utf-8";
+    case ".json":
+      return "application/json; charset=utf-8";
+    case ".svg":
+      return "image/svg+xml";
+    case ".png":
+      return "image/png";
+    case ".jpg":
+    case ".jpeg":
+      return "image/jpeg";
+    case ".webp":
+      return "image/webp";
+    case ".ttf":
+      return "font/ttf";
+    case ".woff":
+      return "font/woff";
+    case ".woff2":
+      return "font/woff2";
+    default:
+      return "application/octet-stream";
+  }
+}
+
+async function authorizeMachineScopedRequest(params: {
   req: IncomingMessage;
   auth: ResolvedGatewayAuth;
   trustedProxies: string[];
@@ -441,6 +508,7 @@ export function createGatewayHttpServer(opts: {
   controlUiEnabled: boolean;
   controlUiBasePath: string;
   controlUiRoot?: ControlUiRootState;
+  vncEnabled: boolean;
   openAiChatCompletionsEnabled: boolean;
   openResponsesEnabled: boolean;
   openResponsesConfig?: import("../config/types.gateway.js").GatewayHttpResponsesConfig;
@@ -457,6 +525,7 @@ export function createGatewayHttpServer(opts: {
     controlUiEnabled,
     controlUiBasePath,
     controlUiRoot,
+    vncEnabled,
     openAiChatCompletionsEnabled,
     openResponsesEnabled,
     openResponsesConfig,
@@ -472,6 +541,9 @@ export function createGatewayHttpServer(opts: {
     : createHttpServer((req, res) => {
         void handleRequest(req, res);
       });
+  const vncViewerPath = resolveVncRoutePath(controlUiBasePath);
+  const vncAssetsPrefix = resolveVncRoutePath(controlUiBasePath, "/novnc/");
+  const noVncRoot = vncEnabled ? resolveBundledNoVncRoot() : null;
 
   async function handleRequest(req: IncomingMessage, res: ServerResponse) {
     // Don't interfere with WebSocket upgrades; ws handles the 'upgrade' event.
@@ -543,9 +615,69 @@ export function createGatewayHttpServer(opts: {
           return;
         }
       }
+      if (
+        vncEnabled &&
+        (requestPath === vncViewerPath ||
+          requestPath === `${vncViewerPath}/` ||
+          requestPath.startsWith(vncAssetsPrefix))
+      ) {
+        const ok = await authorizeMachineScopedRequest({
+          req,
+          auth: resolvedAuth,
+          trustedProxies,
+          clients,
+          rateLimiter,
+        });
+        if (!ok.ok) {
+          sendGatewayAuthFailure(res, ok);
+          return;
+        }
+
+        if (requestPath === vncViewerPath || requestPath === `${vncViewerPath}/`) {
+          res.statusCode = 200;
+          res.setHeader("Content-Type", "text/html; charset=utf-8");
+          res.setHeader("Cache-Control", "no-cache");
+          res.end(VNC_VIEWER_HTML);
+          return;
+        }
+
+        if (!noVncRoot) {
+          res.statusCode = 503;
+          res.setHeader("Content-Type", "text/plain; charset=utf-8");
+          res.end("noVNC assets missing. Install dependencies with `pnpm install`.");
+          return;
+        }
+
+        const rel = requestPath.slice(vncAssetsPrefix.length);
+        if (!isSafeNoVncAssetPath(rel)) {
+          res.statusCode = 404;
+          res.setHeader("Content-Type", "text/plain; charset=utf-8");
+          res.end("Not Found");
+          return;
+        }
+
+        const filePath = path.join(noVncRoot, rel);
+        if (!filePath.startsWith(noVncRoot)) {
+          res.statusCode = 404;
+          res.setHeader("Content-Type", "text/plain; charset=utf-8");
+          res.end("Not Found");
+          return;
+        }
+        if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+          res.statusCode = 404;
+          res.setHeader("Content-Type", "text/plain; charset=utf-8");
+          res.end("Not Found");
+          return;
+        }
+        res.statusCode = 200;
+        res.setHeader("Content-Type", contentTypeForPath(filePath));
+        res.setHeader("Cache-Control", "public, max-age=300");
+        res.end(fs.readFileSync(filePath));
+        return;
+      }
       if (canvasHost) {
         if (isCanvasPath(requestPath)) {
-          const ok = await authorizeCanvasRequest({
+          const ok = await authorizeMachineScopedRequest({
             req,
             auth: resolvedAuth,
             trustedProxies,
@@ -602,19 +734,64 @@ export function attachGatewayUpgradeHandler(opts: {
   wss: WebSocketServer;
   canvasHost: CanvasHostHandler | null;
   clients: Set<GatewayWsClient>;
+  controlUiBasePath: string;
+  vncEnabled: boolean;
+  vncPort: number;
+  vncLog?: SubsystemLogger;
   resolvedAuth: ResolvedGatewayAuth;
   /** Optional rate limiter for auth brute-force protection. */
   rateLimiter?: AuthRateLimiter;
 }) {
-  const { httpServer, wss, canvasHost, clients, resolvedAuth, rateLimiter } = opts;
+  const {
+    httpServer,
+    wss,
+    canvasHost,
+    clients,
+    controlUiBasePath,
+    vncEnabled,
+    vncPort,
+    vncLog,
+    resolvedAuth,
+    rateLimiter,
+  } = opts;
+  const vncWsPath = resolveVncRoutePath(controlUiBasePath, "/ws");
   httpServer.on("upgrade", (req, socket, head) => {
     void (async () => {
+      const url = new URL(req.url ?? "/", "http://localhost");
+      const configSnapshot = loadConfig();
+      const trustedProxies = configSnapshot.gateway?.trustedProxies ?? [];
+      if (vncEnabled && url.pathname === vncWsPath) {
+        const ok = await authorizeMachineScopedRequest({
+          req,
+          auth: resolvedAuth,
+          trustedProxies,
+          clients,
+          rateLimiter,
+        });
+        if (!ok.ok) {
+          writeUpgradeAuthFailure(socket, ok);
+          socket.destroy();
+          return;
+        }
+        wss.handleUpgrade(req, socket, head, (ws) => {
+          attachVncProxy(ws, req, {
+            vncPort,
+            log:
+              vncLog ??
+              ({
+                debug: () => {},
+                info: () => {},
+                warn: () => {},
+                error: () => {},
+              } as SubsystemLogger),
+          });
+        });
+        return;
+      }
+
       if (canvasHost) {
-        const url = new URL(req.url ?? "/", "http://localhost");
         if (url.pathname === CANVAS_WS_PATH) {
-          const configSnapshot = loadConfig();
-          const trustedProxies = configSnapshot.gateway?.trustedProxies ?? [];
-          const ok = await authorizeCanvasRequest({
+          const ok = await authorizeMachineScopedRequest({
             req,
             auth: resolvedAuth,
             trustedProxies,

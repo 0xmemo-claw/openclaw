@@ -269,6 +269,18 @@ export type GatewayNodesConfig = {
   denyCommands?: string[];
 };
 
+export type GatewayBrowserVncConfig = {
+  /** Enable noVNC viewer integration in control UI (default: false). */
+  enabled?: boolean;
+  /** VNC server port (default: 5900, x11vnc default). */
+  vncPort?: number;
+};
+
+export type GatewayBrowserConfig = {
+  /** noVNC viewer settings. */
+  vnc?: GatewayBrowserVncConfig;
+};
+
 export type GatewayToolsConfig = {
   /** Tools to deny via gateway HTTP /tools/invoke (extends defaults). */
   deny?: string[];
@@ -304,6 +316,8 @@ export type GatewayConfig = {
   tls?: GatewayTlsConfig;
   http?: GatewayHttpConfig;
   nodes?: GatewayNodesConfig;
+  /** Browser settings (VNC viewer, automation, etc.). */
+  browser?: GatewayBrowserConfig;
   /**
    * IPs of trusted reverse proxies (e.g. Traefik, nginx). When a connection
    * arrives from one of these IPs, the Gateway trusts `x-forwarded-for` (or

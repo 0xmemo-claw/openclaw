@@ -38,6 +38,8 @@ export async function createGatewayRuntimeState(params: {
   controlUiEnabled: boolean;
   controlUiBasePath: string;
   controlUiRoot?: ControlUiRootState;
+  vncEnabled: boolean;
+  vncPort: number;
   openAiChatCompletionsEnabled: boolean;
   openResponsesEnabled: boolean;
   openResponsesConfig?: import("../config/types.gateway.js").GatewayHttpResponsesConfig;
@@ -125,6 +127,7 @@ export async function createGatewayRuntimeState(params: {
       controlUiEnabled: params.controlUiEnabled,
       controlUiBasePath: params.controlUiBasePath,
       controlUiRoot: params.controlUiRoot,
+      vncEnabled: params.vncEnabled,
       openAiChatCompletionsEnabled: params.openAiChatCompletionsEnabled,
       openResponsesEnabled: params.openResponsesEnabled,
       openResponsesConfig: params.openResponsesConfig,
@@ -166,6 +169,9 @@ export async function createGatewayRuntimeState(params: {
       wss,
       canvasHost,
       clients,
+      controlUiBasePath: params.controlUiBasePath,
+      vncEnabled: params.vncEnabled,
+      vncPort: params.vncPort,
       resolvedAuth: params.resolvedAuth,
       rateLimiter: params.rateLimiter,
     });
