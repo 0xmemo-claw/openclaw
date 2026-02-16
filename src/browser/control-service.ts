@@ -35,8 +35,38 @@ export async function startBrowserControlServiceFromConfig(): Promise<BrowserSer
 
   // Configure stealth script options from resolved config
   if (resolved.stealth.enabled) {
+    let geo = resolved.stealth.geolocation;
+
+    // Auto-derive geolocation from proxy IP if no explicit geo configured
+    if (!geo && resolved.stealth.proxy?.url) {
+      try {
+        geo = await deriveGeoFromProxy(resolved.stealth.proxy.url);
+        if (geo) {
+          logService.info(
+            `Stealth: auto-derived geolocation from proxy → ${geo.city ?? "unknown"} (${geo.latitude}, ${geo.longitude})`,
+          );
+        }
+      } catch (err) {
+        logService.warn(`Stealth: failed to derive geo from proxy: ${String(err)}`);
+      }
+    }
+
+    // If still no geo, derive from local machine IP
+    if (!geo) {
+      try {
+        geo = await deriveGeoFromLocalIp();
+        if (geo) {
+          logService.info(
+            `Stealth: using local IP geolocation → ${geo.city ?? "unknown"} (${geo.latitude}, ${geo.longitude})`,
+          );
+        }
+      } catch (err) {
+        logService.warn(`Stealth: failed to derive local geo: ${String(err)}`);
+      }
+    }
+
     setStealthOptions({
-      geolocation: resolved.stealth.geolocation,
+      geolocation: geo,
       userAgent: resolved.stealth.userAgent,
     });
   }
@@ -65,6 +95,60 @@ export async function startBrowserControlServiceFromConfig(): Promise<BrowserSer
     `Browser control service ready (profiles=${Object.keys(resolved.profiles).length})`,
   );
   return state;
+}
+
+type GeoResult = { latitude: number; longitude: number; city?: string };
+
+async function fetchGeoForIp(ip?: string): Promise<GeoResult | undefined> {
+  const url = ip ? `https://ipinfo.io/${ip}/json` : "https://ipinfo.io/json";
+  const ctrl = new AbortController();
+  const t = setTimeout(ctrl.abort.bind(ctrl), 5000);
+  try {
+    const res = await fetch(url, { signal: ctrl.signal });
+    if (!res.ok) {
+      return undefined;
+    }
+    const data = (await res.json()) as { loc?: string; city?: string };
+    if (!data.loc) {
+      return undefined;
+    }
+    const [lat, lon] = data.loc.split(",").map(Number);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      return undefined;
+    }
+    return { latitude: lat, longitude: lon, city: data.city };
+  } catch {
+    return undefined;
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+async function deriveGeoFromProxy(proxyUrl: string): Promise<GeoResult | undefined> {
+  // Get the external IP through the proxy
+  const ctrl = new AbortController();
+  const t = setTimeout(ctrl.abort.bind(ctrl), 8000);
+  clearTimeout(t);
+
+  // Simpler: extract host from proxy URL, but that's localhost.
+  // Best approach: shell out to curl through the proxy.
+  try {
+    const { execSync } = await import("node:child_process");
+    const ip = execSync(`curl -s --proxy ${proxyUrl} --max-time 5 https://api.ipify.org`, {
+      encoding: "utf-8",
+      timeout: 8000,
+    }).trim();
+    if (!ip || !/^\d+\.\d+\.\d+\.\d+$/.test(ip)) {
+      return undefined;
+    }
+    return fetchGeoForIp(ip);
+  } catch {
+    return undefined;
+  }
+}
+
+async function deriveGeoFromLocalIp(): Promise<GeoResult | undefined> {
+  return fetchGeoForIp();
 }
 
 export async function stopBrowserControlService(): Promise<void> {
