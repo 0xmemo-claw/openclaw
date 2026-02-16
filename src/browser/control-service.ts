@@ -47,6 +47,38 @@ export async function startBrowserControlServiceFromConfig(): Promise<BrowserSer
     return null;
   }
 
+  // Auto-derive geolocation from proxy IP if not explicitly configured
+  if (resolved.stealth.enabled && !resolved.stealth.geolocation && resolved.stealth.proxy?.url) {
+    try {
+      const { execSync } = await import("node:child_process");
+      const proxyUrl = resolved.stealth.proxy.url;
+      const ip = execSync(
+        `curl -s --proxy ${JSON.stringify(proxyUrl)} --max-time 5 https://api.ipify.org`,
+        {
+          encoding: "utf-8",
+          timeout: 8000,
+        },
+      ).trim();
+      if (ip && /^\d+\.\d+\.\d+\.\d+$/.test(ip)) {
+        const info = JSON.parse(
+          execSync(`curl -s --max-time 5 https://ipinfo.io/${ip}/json`, {
+            encoding: "utf-8",
+            timeout: 8000,
+          }),
+        );
+        if (info.loc) {
+          const [lat, lng] = info.loc.split(",").map(Number);
+          resolved.stealth.geolocation = { latitude: lat, longitude: lng };
+          logService.info(
+            `Auto-derived geolocation from proxy IP ${ip}: ${info.city ?? ""} (${lat}, ${lng})`,
+          );
+        }
+      }
+    } catch (err) {
+      logService.warn(`Failed to auto-derive geolocation: ${String(err)}`);
+    }
+  }
+
   // Configure stealth script options from resolved config
   if (resolved.stealth.enabled) {
     let geo = resolved.stealth.geolocation;
@@ -108,6 +140,23 @@ export async function startBrowserControlServiceFromConfig(): Promise<BrowserSer
   logService.info(
     `Browser control service ready (profiles=${Object.keys(resolved.profiles).length})`,
   );
+
+  // Eagerly spawn browser on startup so it's ready for VNC/automation
+  if (resolved.enabled) {
+    const ctx = createBrowserRouteContext({
+      getState: () => state,
+      refreshConfigFromDisk: false,
+    });
+    ctx
+      .ensureBrowserAvailable()
+      .then(() => {
+        logService.info("Browser auto-started on boot");
+      })
+      .catch((err) => {
+        logService.warn(`Browser auto-start failed: ${String(err)}`);
+      });
+  }
+
   return state;
 }
 
