@@ -201,6 +201,45 @@ export async function launchOpenClawChrome(
       "--password-store=basic",
     ];
 
+    // === Stealth flags ===
+    if (resolved.stealth.enabled) {
+      args.push(
+        "--disable-infobars",
+        "--disable-extensions",
+        "--disable-preconnect",
+        "--disable-default-apps",
+        "--disable-hang-monitor",
+        "--disable-popup-blocking",
+        "--disable-prompt-on-repost",
+        "--disable-client-side-phishing-detection",
+        "--disable-background-timer-throttling",
+        "--disable-backgrounding-occluded-windows",
+        "--disable-renderer-backgrounding",
+        "--lang=en-US,en",
+        "--window-size=1920,1080",
+        "--force-device-scale-factor=1",
+        "--force-color-profile=srgb",
+        "--enable-unsafe-swiftshader",
+        "--use-gl=angle",
+        "--use-angle=swiftshader-webgl",
+        "--enable-features=NetworkService,NetworkServiceInProcess",
+        "--disable-features=IsolateOrigins,site-per-process,TranslateUI",
+      );
+    }
+
+    // === Proxy flags ===
+    if (resolved.stealth.proxy?.url) {
+      args.push(`--proxy-server=${resolved.stealth.proxy.url}`);
+      if (resolved.stealth.proxy.bypassList.length > 0) {
+        args.push(`--proxy-bypass-list=${resolved.stealth.proxy.bypassList.join(";")}`);
+      }
+    }
+
+    // === Custom user agent ===
+    if (resolved.stealth.userAgent) {
+      args.push(`--user-agent=${resolved.stealth.userAgent}`);
+    }
+
     if (resolved.headless) {
       // Best-effort; older Chromes may ignore.
       args.push("--headless=new");
@@ -286,7 +325,7 @@ export async function launchOpenClawChrome(
 
   const proc = spawnOnce();
   // Wait for CDP to come up.
-  const readyDeadline = Date.now() + 15_000;
+  const readyDeadline = Date.now() + 30_000;
   while (Date.now() < readyDeadline) {
     if (await isChromeReachable(profile.cdpUrl, 500)) {
       break;

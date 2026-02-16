@@ -11,6 +11,7 @@ import { formatErrorMessage } from "../infra/errors.js";
 import { appendCdpPath, fetchJson, getHeadersWithAuth, withCdpSocket } from "./cdp.helpers.js";
 import { normalizeCdpWsUrl } from "./cdp.js";
 import { getChromeWebSocketUrl } from "./chrome.js";
+import { type StealthScriptOptions, getAllStealthScripts } from "./stealth.js";
 
 export type BrowserConsoleMessage = {
   type: string;
@@ -102,6 +103,17 @@ const MAX_NETWORK_REQUESTS = 500;
 
 let cached: ConnectedBrowser | null = null;
 let connecting: Promise<ConnectedBrowser> | null = null;
+
+/** Module-level stealth options, set via setStealthOptions(). */
+let _stealthOpts: StealthScriptOptions | undefined;
+
+/**
+ * Configure stealth script options (geolocation, user agent, etc.).
+ * Called once during browser initialization from the resolved config.
+ */
+export function setStealthOptions(opts: StealthScriptOptions | undefined): void {
+  _stealthOpts = opts;
+}
 
 function normalizeCdpUrl(raw: string) {
   return raw.replace(/\/$/, "");
@@ -304,7 +316,24 @@ export function ensureContextState(context: BrowserContext): ContextState {
   }
   const state: ContextState = { traceActive: false };
   contextStates.set(context, state);
+
+  // Inject stealth scripts to avoid bot detection
+  injectStealthScripts(context);
+
   return state;
+}
+
+/**
+ * Inject stealth scripts into a browser context.
+ * These scripts run before any page scripts to modify browser fingerprints.
+ */
+function injectStealthScripts(context: BrowserContext): void {
+  const scripts = getAllStealthScripts(_stealthOpts);
+  for (const script of scripts) {
+    context.addInitScript(script).catch(() => {
+      // Ignore errors - init script injection might fail if context is closed
+    });
+  }
 }
 
 function observeBrowser(browser: Browser) {

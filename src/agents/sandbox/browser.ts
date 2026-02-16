@@ -77,6 +77,7 @@ function buildSandboxBrowserResolvedConfig(params: {
         color: DEFAULT_OPENCLAW_BROWSER_COLOR,
       },
     },
+    stealth: { enabled: true },
   };
 }
 

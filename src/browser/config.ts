@@ -1,4 +1,9 @@
-import type { BrowserConfig, BrowserProfileConfig, OpenClawConfig } from "../config/config.js";
+import type {
+  BrowserConfig,
+  BrowserProfileConfig,
+  BrowserStealthConfig,
+  OpenClawConfig,
+} from "../config/config.js";
 import { resolveGatewayPort } from "../config/paths.js";
 import {
   deriveDefaultBrowserCdpPortRange,
@@ -32,6 +37,14 @@ export type ResolvedBrowserConfig = {
   defaultProfile: string;
   profiles: Record<string, BrowserProfileConfig>;
   extraArgs: string[];
+  stealth: ResolvedStealthConfig;
+};
+
+export type ResolvedStealthConfig = {
+  enabled: boolean;
+  proxy?: { url: string; bypassList: string[] };
+  userAgent?: string;
+  geolocation?: { latitude: number; longitude: number; city?: string };
 };
 
 export type ResolvedBrowserProfile = {
@@ -183,6 +196,8 @@ export function resolveBrowserConfig(
   const attachOnly = cfg?.attachOnly === true;
   const executablePath = cfg?.executablePath?.trim() || undefined;
 
+  const stealth = resolveStealthConfig(cfg?.stealth);
+
   const defaultProfileFromConfig = cfg?.defaultProfile?.trim() || undefined;
   // Use legacy cdpUrl port for backward compatibility when no profiles configured
   const legacyCdpPort = rawCdpUrl ? cdpInfo.port : undefined;
@@ -218,7 +233,31 @@ export function resolveBrowserConfig(
     defaultProfile,
     profiles,
     extraArgs,
+    stealth,
   };
+}
+
+function resolveStealthConfig(raw: BrowserStealthConfig | undefined): ResolvedStealthConfig {
+  const enabled = raw?.enabled !== false; // default true
+  const result: ResolvedStealthConfig = { enabled };
+
+  if (raw?.proxy?.url) {
+    result.proxy = {
+      url: raw.proxy.url,
+      bypassList: raw.proxy.bypassList ?? [],
+    };
+  }
+  if (raw?.userAgent) {
+    result.userAgent = raw.userAgent;
+  }
+  if (raw?.geolocation && raw.geolocation.latitude != null && raw.geolocation.longitude != null) {
+    result.geolocation = {
+      latitude: raw.geolocation.latitude,
+      longitude: raw.geolocation.longitude,
+      city: raw.geolocation.city,
+    };
+  }
+  return result;
 }
 
 /**

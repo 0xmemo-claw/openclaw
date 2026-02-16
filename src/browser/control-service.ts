@@ -2,6 +2,8 @@ import { loadConfig } from "../config/config.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { resolveBrowserConfig } from "./config.js";
 import { ensureBrowserControlAuth } from "./control-auth.js";
+import { ensureChromeExtensionRelayServer } from "./extension-relay.js";
+import { setStealthOptions } from "./pw-session.js";
 import { type BrowserServerState, createBrowserRouteContext } from "./server-context.js";
 import { ensureExtensionRelayForProfiles, stopKnownBrowserProfiles } from "./server-lifecycle.js";
 
@@ -29,6 +31,14 @@ export async function startBrowserControlServiceFromConfig(): Promise<BrowserSer
   const resolved = resolveBrowserConfig(cfg.browser, cfg);
   if (!resolved.enabled) {
     return null;
+  }
+
+  // Configure stealth script options from resolved config
+  if (resolved.stealth.enabled) {
+    setStealthOptions({
+      geolocation: resolved.stealth.geolocation,
+      userAgent: resolved.stealth.userAgent,
+    });
   }
   try {
     const ensured = await ensureBrowserControlAuth({ cfg });

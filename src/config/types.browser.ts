@@ -12,6 +12,26 @@ export type BrowserSnapshotDefaults = {
   /** Default snapshot mode (applies when mode is not provided). */
   mode?: "efficient";
 };
+export type BrowserStealthConfig = {
+  /** Enable stealth scripts injection. Default: true */
+  enabled?: boolean;
+  /** Proxy configuration for stealth browsing. */
+  proxy?: {
+    /** Proxy URL, e.g. "http://127.0.0.1:18801" */
+    url?: string;
+    /** Domains to bypass the proxy for. */
+    bypassList?: string[];
+  };
+  /** Custom user-agent override. */
+  userAgent?: string;
+  /** Geolocation spoofing for the stealth script. */
+  geolocation?: {
+    latitude?: number;
+    longitude?: number;
+    city?: string;
+  };
+};
+
 export type BrowserConfig = {
   enabled?: boolean;
   /** If false, disable browser act:evaluate (arbitrary JS). Default: true */
@@ -36,6 +56,8 @@ export type BrowserConfig = {
   defaultProfile?: string;
   /** Named browser profiles with explicit CDP ports or URLs. */
   profiles?: Record<string, BrowserProfileConfig>;
+  /** Stealth / anti-detection configuration. */
+  stealth?: BrowserStealthConfig;
   /** Default snapshot options (applied by the browser tool/CLI when unset). */
   snapshotDefaults?: BrowserSnapshotDefaults;
   /**
