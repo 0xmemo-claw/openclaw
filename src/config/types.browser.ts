@@ -17,7 +17,7 @@ export type BrowserStealthConfig = {
   enabled?: boolean;
   /** Proxy configuration for stealth browsing. */
   proxy?: {
-    /** Proxy URL, e.g. "http://127.0.0.1:18801" */
+    /** Proxy URL (supports ${ENV_VAR} syntax), e.g. "${BROWSER_PROXY_URL}" or "http://user:pass@proxy.com:8080" */
     url?: string;
     /** Domains to bypass the proxy for. */
     bypassList?: string[];
@@ -29,6 +29,13 @@ export type BrowserStealthConfig = {
     latitude?: number;
     longitude?: number;
     city?: string;
+  };
+  /** CAPTCHA service configuration for automated solving. */
+  captcha?: {
+    /** CAPTCHA service provider. */
+    provider?: "2captcha" | "capsolver";
+    /** API key for the CAPTCHA service (supports ${ENV_VAR} syntax), e.g. "${TWOCAPTCHA_API_KEY}". */
+    apiKey?: string;
   };
 };
 
