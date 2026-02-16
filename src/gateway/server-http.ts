@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import type { WebSocketServer } from "ws";
 import { resolveAgentAvatar } from "../agents/identity-avatar.js";
 import {
+  createBrowserControlContext,
   getBrowserControlState,
   startBrowserControlServiceFromConfig,
   stopBrowserControlService,
@@ -660,30 +661,65 @@ export function createGatewayHttpServer(opts: {
           try {
             if (action === "status") {
               const st = getBrowserControlState();
+              // Extract runtime info from the default/openclaw profile
+              const profileState = st
+                ? (st.profiles.get("openclaw") ?? st.profiles.values().next().value ?? null)
+                : null;
+              const chrome = profileState?.running ?? null;
+              const resolved = st?.resolved;
+              const stealth = resolved?.stealth;
               res.statusCode = 200;
               res.end(
                 JSON.stringify({
-                  running: !!st,
-                  pid: st?.pid ?? null,
-                  cdpPort: st?.cdpPort ?? null,
-                  cdpReady: !!st?.cdpHttp,
-                  profile: st?.profile ?? null,
-                  tabs: st?.tabs?.length ?? 0,
+                  running: !!chrome,
+                  pid: chrome?.pid ?? null,
+                  cdpPort: chrome?.cdpPort ?? null,
+                  tabs: 0, // populated below if cdp is reachable
+                  stealth: stealth
+                    ? {
+                        enabled: stealth.enabled,
+                        proxy: !!stealth.proxy?.url,
+                        proxyUrl: stealth.proxy?.url
+                          ? stealth.proxy.url.replace(/:[^:@]+@/, ":***@")
+                          : null,
+                        userAgent: stealth.userAgent ?? null,
+                        captcha: stealth.captcha
+                          ? {
+                              provider: stealth.captcha.provider,
+                              configured: !!stealth.captcha.apiKey,
+                            }
+                          : null,
+                        geolocation: stealth.geolocation ?? null,
+                      }
+                    : null,
                 }),
               );
             } else if (action === "restart" && req.method === "POST") {
               await stopBrowserControlService();
-              const st = await startBrowserControlServiceFromConfig();
+              await startBrowserControlServiceFromConfig();
               res.statusCode = 200;
-              res.end(JSON.stringify({ ok: true, running: !!st }));
+              res.end(JSON.stringify({ ok: true, starting: true }));
+              try {
+                const ctx = createBrowserControlContext();
+                await ctx.ensureBrowserAvailable();
+              } catch {
+                // Client will see the error via status polling
+              }
             } else if (action === "stop" && req.method === "POST") {
               await stopBrowserControlService();
               res.statusCode = 200;
               res.end(JSON.stringify({ ok: true, running: false }));
             } else if (action === "start" && req.method === "POST") {
-              const st = await startBrowserControlServiceFromConfig();
+              await startBrowserControlServiceFromConfig();
+              // Respond immediately, spawn Chrome in background
               res.statusCode = 200;
-              res.end(JSON.stringify({ ok: true, running: !!st }));
+              res.end(JSON.stringify({ ok: true, starting: true }));
+              try {
+                const ctx = createBrowserControlContext();
+                await ctx.ensureBrowserAvailable();
+              } catch {
+                // Client will see the error via status polling
+              }
             } else {
               res.statusCode = 404;
               res.end(JSON.stringify({ error: "Unknown action" }));
