@@ -27,6 +27,8 @@ export type GatewayRuntimeConfig = {
   openResponsesConfig?: import("../config/types.gateway.js").GatewayHttpResponsesConfig;
   controlUiBasePath: string;
   controlUiRoot?: string;
+  vncEnabled: boolean;
+  vncPort: number;
   resolvedAuth: ResolvedGatewayAuth;
   authMode: ResolvedGatewayAuth["mode"];
   tailscaleConfig: GatewayTailscaleConfig;
@@ -84,6 +86,14 @@ export async function resolveGatewayRuntimeConfig(params: {
     typeof controlUiRootRaw === "string" && controlUiRootRaw.trim().length > 0
       ? controlUiRootRaw.trim()
       : undefined;
+  const vncEnabled = params.cfg.gateway?.browser?.vnc?.enabled === true;
+  const vncPort = params.cfg.gateway?.browser?.vnc?.vncPort ?? 5900;
+  const authBase = params.cfg.gateway?.auth ?? {};
+  const authOverrides = params.auth ?? {};
+  const authConfig = {
+    ...authBase,
+    ...authOverrides,
+  };
   const tailscaleBase = params.cfg.gateway?.tailscale ?? {};
   const tailscaleOverrides = params.tailscale ?? {};
   const tailscaleConfig = mergeGatewayTailscaleConfig(tailscaleBase, tailscaleOverrides);
@@ -149,6 +159,8 @@ export async function resolveGatewayRuntimeConfig(params: {
       : undefined,
     controlUiBasePath,
     controlUiRoot,
+    vncEnabled,
+    vncPort,
     resolvedAuth,
     authMode,
     tailscaleConfig,
