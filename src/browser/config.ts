@@ -45,6 +45,7 @@ export type ResolvedStealthConfig = {
   proxy?: { url: string; bypassList: string[] };
   userAgent?: string;
   geolocation?: { latitude: number; longitude: number; city?: string };
+  captcha?: { provider: "2captcha" | "capsolver"; apiKey: string };
 };
 
 export type ResolvedBrowserProfile = {
@@ -255,6 +256,12 @@ function resolveStealthConfig(raw: BrowserStealthConfig | undefined): ResolvedSt
       latitude: raw.geolocation.latitude,
       longitude: raw.geolocation.longitude,
       city: raw.geolocation.city,
+    };
+  }
+  if (raw?.captcha?.provider && raw.captcha.apiKey) {
+    result.captcha = {
+      provider: raw.captcha.provider,
+      apiKey: raw.captcha.apiKey,
     };
   }
   return result;

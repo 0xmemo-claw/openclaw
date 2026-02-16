@@ -231,6 +231,13 @@ export const OpenClawSchema = z
               })
               .strict()
               .optional(),
+            captcha: z
+              .object({
+                provider: z.union([z.literal("2captcha"), z.literal("capsolver")]).optional(),
+                apiKey: z.string().optional(),
+              })
+              .strict()
+              .optional(),
           })
           .strict()
           .optional(),
