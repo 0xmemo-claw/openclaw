@@ -174,7 +174,7 @@ export function renderApp(state: AppViewState) {
             <span class="nav-label__text">${t("common.resources")}</span>
           </div>
           <div class="nav-group__items">
-            <a class="nav-item" href=${basePath ? `${basePath}/vnc` : "/vnc"} title="Browser (VNC)">
+            <a class="nav-item" href=${`${normalizeBasePath(basePath) || ""}/vnc`} title="Browser (VNC)">
               <span class="nav-item__icon" aria-hidden="true">${icons.monitor}</span>
               <span class="nav-item__text">Browser</span>
             </a>
