@@ -115,6 +115,20 @@ export function setStealthOptions(opts: StealthScriptOptions | undefined): void 
   _stealthOpts = opts;
 }
 
+/** Module-level proxy credentials for authenticated proxy support. */
+let _proxyCredentials: { username: string; password: string } | undefined;
+
+/**
+ * Configure proxy credentials for authenticated proxy support.
+ * These are applied to pages when Chrome's proxy requires authentication.
+ * Called once during browser initialization from the resolved config.
+ */
+export function setProxyCredentials(
+  creds: { username: string; password: string } | undefined,
+): void {
+  _proxyCredentials = creds;
+}
+
 function normalizeCdpUrl(raw: string) {
   return raw.replace(/\/$/, "");
 }
@@ -320,7 +334,70 @@ export function ensureContextState(context: BrowserContext): ContextState {
   // Inject stealth scripts to avoid bot detection
   injectStealthScripts(context);
 
+  // Set proxy credentials if configured so Chrome can authenticate with the proxy
+  if (_proxyCredentials) {
+    injectProxyCredentials(context, _proxyCredentials);
+  }
+
   return state;
+}
+
+/**
+ * Inject proxy credentials into a browser context via CDP Fetch domain.
+ * Enables Fetch interception so we can respond to proxy 407 auth challenges.
+ * This is the correct approach for Chrome launched externally with --proxy-server=.
+ */
+function injectProxyCredentials(
+  context: BrowserContext,
+  credentials: { username: string; password: string },
+): void {
+  const enableProxyAuth = async (page: Page) => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const session = (await page.context().newCDPSession(page)) as any;
+      // Enable Fetch interception for auth challenges (typed as any to avoid
+      // overly-strict Playwright CDP type unions that don't play well here)
+      await session.send("Fetch.enable", { handleAuthRequests: true });
+      session.on(
+        "Fetch.authRequired",
+        (event: { requestId: string; authChallenge?: { source?: string } }) => {
+          if (event.authChallenge?.source === "Proxy") {
+            session
+              .send("Fetch.continueWithAuth", {
+                requestId: event.requestId,
+                authChallengeResponse: {
+                  response: "ProvideCredentials",
+                  username: credentials.username,
+                  password: credentials.password,
+                },
+              })
+              .catch(() => {});
+          } else {
+            session
+              .send("Fetch.continueWithAuth", {
+                requestId: event.requestId,
+                authChallengeResponse: { response: "Default" },
+              })
+              .catch(() => {});
+          }
+        },
+      );
+      session.on("Fetch.requestPaused", (event: { requestId: string }) => {
+        session.send("Fetch.continueRequest", { requestId: event.requestId }).catch(() => {});
+      });
+    } catch {
+      // Ignore errors — CDP session may not be available in all contexts
+    }
+  };
+
+  // Apply to all existing pages in the context
+  for (const page of context.pages()) {
+    enableProxyAuth(page).catch(() => {});
+  }
+  // Apply to future pages
+  context.on("page", (page) => {
+    enableProxyAuth(page).catch(() => {});
+  });
 }
 
 /**

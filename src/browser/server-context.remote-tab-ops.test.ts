@@ -34,6 +34,7 @@ function makeState(
       headless: true,
       noSandbox: false,
       attachOnly: false,
+      stealth: { enabled: true },
       defaultProfile: profile,
       profiles: {
         remote: {

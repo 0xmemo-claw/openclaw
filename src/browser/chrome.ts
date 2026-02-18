@@ -160,6 +160,25 @@ export async function isChromeCdpReady(
   return await canOpenWebSocket(wsUrl, handshakeTimeoutMs);
 }
 
+/**
+ * Strip credentials (user:pass@) from a proxy URL.
+ * Chrome's --proxy-server flag does not support embedded credentials —
+ * passing them causes net::ERR_NO_SUPPORTED_PROXIES.
+ * Returns the URL with only scheme://host:port.
+ */
+function stripProxyCredentials(proxyUrl: string): string {
+  try {
+    const u = new URL(proxyUrl);
+    // Clear credentials
+    u.username = "";
+    u.password = "";
+    return u.toString();
+  } catch {
+    // If URL parsing fails, return as-is and let Chrome deal with it
+    return proxyUrl;
+  }
+}
+
 export async function launchOpenClawChrome(
   resolved: ResolvedBrowserConfig,
   profile: ResolvedBrowserProfile,
@@ -229,7 +248,12 @@ export async function launchOpenClawChrome(
 
     // === Proxy flags ===
     if (resolved.stealth.proxy?.url) {
-      args.push(`--proxy-server=${resolved.stealth.proxy.url}`);
+      // Chrome's --proxy-server does NOT support credentials embedded in the URL
+      // (e.g. http://user:pass@host:port causes net::ERR_NO_SUPPORTED_PROXIES).
+      // Strip credentials and pass only scheme://host:port to Chrome.
+      // Proxy auth is handled separately at the Playwright context level.
+      const strippedProxyUrl = stripProxyCredentials(resolved.stealth.proxy.url);
+      args.push(`--proxy-server=${strippedProxyUrl}`);
       if (resolved.stealth.proxy.bypassList.length > 0) {
         args.push(`--proxy-bypass-list=${resolved.stealth.proxy.bypassList.join(";")}`);
       }
