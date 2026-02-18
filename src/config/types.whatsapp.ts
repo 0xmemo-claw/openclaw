@@ -76,6 +76,13 @@ type WhatsAppSharedConfig = {
   debounceMs?: number;
   /** Heartbeat visibility settings. */
   heartbeat?: ChannelHeartbeatVisibilityConfig;
+  /** Message store configuration for message history and search. */
+  messageStore?: {
+    /** Enable message store (default: false). */
+    enabled?: boolean;
+    /** Maximum messages per chat (default: 500). */
+    maxMessagesPerChat?: number;
+  };
 };
 
 type WhatsAppConfigCore = {
@@ -91,6 +98,15 @@ type WhatsAppConfigCore = {
   messagePrefix?: string;
   /** Outbound response prefix override. */
   responsePrefix?: string;
+  /** Override auth directory (Baileys multi-file auth state). */
+  authDir?: string;
+  /** Message store configuration for message history and search. */
+  messageStore?: {
+    /** Enable message store (default: false). */
+    enabled?: boolean;
+    /** Maximum messages per chat (default: 500). */
+    maxMessagesPerChat?: number;
+  };
 };
 
 export type WhatsAppConfig = WhatsAppConfigCore &

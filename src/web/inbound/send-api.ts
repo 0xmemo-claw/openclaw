@@ -2,6 +2,7 @@ import type { AnyMessageContent, WAPresence } from "@whiskeysockets/baileys";
 import { recordChannelActivity } from "../../infra/channel-activity.js";
 import { toWhatsappJid } from "../../utils.js";
 import type { ActiveWebSendOptions } from "../active-listener.js";
+import { WhatsAppMessageStore, type StoredMessage } from "../whatsapp-message-store.js";
 
 function recordWhatsAppOutbound(accountId: string) {
   recordChannelActivity({
@@ -23,6 +24,7 @@ export function createWebSendApi(params: {
     sendPresenceUpdate: (presence: WAPresence, jid?: string) => Promise<unknown>;
   };
   defaultAccountId: string;
+  messageStore?: WhatsAppMessageStore | null;
 }) {
   return {
     sendMessage: async (
@@ -67,6 +69,19 @@ export function createWebSendApi(params: {
       const accountId = sendOptions?.accountId ?? params.defaultAccountId;
       recordWhatsAppOutbound(accountId);
       const messageId = resolveOutboundMessageId(result);
+
+      // Store outbound message
+      if (text && params.messageStore) {
+        const storedMsg: StoredMessage = {
+          id: messageId,
+          chatJid: jid,
+          text,
+          timestamp: Date.now(),
+          fromMe: true,
+          type: mediaBuffer ? "media" : "text",
+        };
+        params.messageStore.storeMessage(storedMsg);
+      }
       return { messageId };
     },
     sendPoll: async (
