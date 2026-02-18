@@ -277,6 +277,14 @@ export async function launchOpenClawChrome(
       args.push("--disable-dev-shm-usage");
     }
 
+    // === Proxy flags ===
+    if (resolved.stealth.proxy?.url) {
+      args.push(`--proxy-server=${resolved.stealth.proxy.url}`);
+      if (resolved.stealth.proxy.bypassList.length > 0) {
+        args.push(`--proxy-bypass-list=${resolved.stealth.proxy.bypassList.join(";")}`);
+      }
+    }
+
     // Stealth: hide navigator.webdriver from automation detection (#80)
     args.push("--disable-blink-features=AutomationControlled");
 
