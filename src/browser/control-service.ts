@@ -3,7 +3,7 @@ import { createSubsystemLogger } from "../logging/subsystem.js";
 import { resolveBrowserConfig } from "./config.js";
 import { ensureBrowserControlAuth } from "./control-auth.js";
 import { ensureChromeExtensionRelayServer } from "./extension-relay.js";
-import { setStealthOptions } from "./pw-session.js";
+import { setProxyCredentials, setStealthOptions } from "./pw-session.js";
 import { type BrowserServerState, createBrowserRouteContext } from "./server-context.js";
 import { ensureExtensionRelayForProfiles, stopKnownBrowserProfiles } from "./server-lifecycle.js";
 
@@ -115,6 +115,17 @@ export async function startBrowserControlServiceFromConfig(): Promise<BrowserSer
       geolocation: geo,
       userAgent: resolved.stealth.userAgent,
     });
+  }
+
+  // Extract proxy credentials from the proxy URL (if any) so Playwright can
+  // handle proxy 407 authentication challenges automatically.
+  // Chrome's --proxy-server flag does not accept credentials in the URL, so
+  // we strip them there (chrome.ts) and supply them here instead.
+  {
+    const proxyCredentials = resolved.stealth.proxy?.url
+      ? extractProxyCredentials(resolved.stealth.proxy.url)
+      : undefined;
+    setProxyCredentials(proxyCredentials);
   }
   try {
     const ensured = await ensureBrowserControlAuth({ cfg });
@@ -234,4 +245,26 @@ export async function stopBrowserControlService(): Promise<void> {
   } catch {
     // ignore
   }
+}
+
+/**
+ * Extract username and password from a proxy URL with embedded credentials.
+ * E.g. "http://user:pass@host:port" → { username: "user", password: "pass" }
+ * Returns undefined if the URL has no credentials.
+ */
+function extractProxyCredentials(
+  proxyUrl: string,
+): { username: string; password: string } | undefined {
+  try {
+    const u = new URL(proxyUrl);
+    if (u.username) {
+      return {
+        username: decodeURIComponent(u.username),
+        password: decodeURIComponent(u.password),
+      };
+    }
+  } catch {
+    // ignore parse errors
+  }
+  return undefined;
 }
