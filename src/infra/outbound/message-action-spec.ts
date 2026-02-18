@@ -55,6 +55,12 @@ export const MESSAGE_ACTION_TARGET_MODE: Record<ChannelMessageActionName, Messag
     kick: "none",
     ban: "none",
     "set-presence": "none",
+    getMessages: "to",
+    searchMessages: "none",
+    listChats: "none",
+    fetchHistory: "to",
+    resolveContact: "none",
+    setContactName: "to",
   };
 
 const ACTION_TARGET_ALIASES: Partial<Record<ChannelMessageActionName, string[]>> = {

@@ -106,6 +106,13 @@ export const WhatsAppConfigSchema = WhatsAppSharedSchema.extend({
     })
     .strict()
     .optional(),
+  messageStore: z
+    .object({
+      enabled: z.boolean().optional().default(false),
+      maxMessagesPerChat: z.number().int().positive().optional().default(500),
+    })
+    .strict()
+    .optional(),
 })
   .strict()
   .superRefine((value, ctx) => {

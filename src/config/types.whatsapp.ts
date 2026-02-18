@@ -101,6 +101,13 @@ export type WhatsAppConfig = {
   debounceMs?: number;
   /** Heartbeat visibility settings for this channel. */
   heartbeat?: ChannelHeartbeatVisibilityConfig;
+  /** Message store configuration for message history and search. */
+  messageStore?: {
+    /** Enable message store (default: false). */
+    enabled?: boolean;
+    /** Maximum messages per chat (default: 500). */
+    maxMessagesPerChat?: number;
+  };
 };
 
 export type WhatsAppAccountConfig = {
@@ -149,4 +156,11 @@ export type WhatsAppAccountConfig = {
   debounceMs?: number;
   /** Heartbeat visibility settings for this account. */
   heartbeat?: ChannelHeartbeatVisibilityConfig;
+  /** Message store configuration for message history and search. */
+  messageStore?: {
+    /** Enable message store (default: false). */
+    enabled?: boolean;
+    /** Maximum messages per chat (default: 500). */
+    maxMessagesPerChat?: number;
+  };
 };
