@@ -155,12 +155,12 @@ importers:
       osc-progress:
         specifier: ^0.3.0
         version: 0.3.0
+      patchright:
+        specifier: ^1.57.0
+        version: 1.57.0
       pdfjs-dist:
         specifier: ^5.4.624
         version: 5.4.624
-      playwright:
-        specifier: 1.58.2
-        version: 1.58.2
       playwright-core:
         specifier: 1.58.2
         version: 1.58.2
@@ -593,12 +593,9 @@ importers:
       marked:
         specifier: ^17.0.3
         version: 17.0.3
-      signal-polyfill:
-        specifier: ^0.2.2
-        version: 0.2.2
-      signal-utils:
-        specifier: ^0.21.1
-        version: 0.21.1(signal-polyfill@0.2.2)
+      patchright:
+        specifier: ^1.57.0
+        version: 1.57.0
       vite:
         specifier: 7.3.1
         version: 7.3.1(@types/node@25.3.0)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.8.2)
@@ -4844,9 +4841,15 @@ packages:
   partial-json@0.1.7:
     resolution: {integrity: sha512-Njv/59hHaokb/hRUjce3Hdv12wd60MtM9Z5Olmn+nehe0QDAsRtRbJPvJ0Z91TusF0SuZRIvnM+S4l6EIP8leA==}
 
-  path-is-absolute@1.0.1:
-    resolution: {integrity: sha512-AVbw3UJ2e9bq64vSaS9Am0fje1Pa8pbGqTTsmXfaIiMpnr5DlDhfJOuLj9Sf95ZPVDAUerDfEk88MPmPe7UCQg==}
-    engines: {node: '>=0.10.0'}
+  patchright-core@1.57.0:
+    resolution: {integrity: sha512-um/9Wue7IFAa9UDLacjNgDn62ub5GJe1b1qouvYpELIF9rsFVMNhRo/rRXYajupLwp5xKJ0sSjOV6sw8/HarBQ==}
+    engines: {node: '>=18'}
+    hasBin: true
+
+  patchright@1.57.0:
+    resolution: {integrity: sha512-pxbI/D65QiFuCY3qUXKQONRhplR3rkYFhry5ieimEbzLNxu/xfOYizQRyuMgc6F5ZoZ37QNIwZz9PWEfn6aC1Q==}
+    engines: {node: '>=18'}
+    hasBin: true
 
   path-key@3.1.1:
     resolution: {integrity: sha512-ojmeN0qd+y0jszEtoY48r0Peq5dwMEkIlCOu6Q5f41lfkswXuKtYrhgoTpLnyIcHm24Uhqx+5Tqm2InSwLhE6Q==}
@@ -10656,8 +10659,13 @@ snapshots:
 
   partial-json@0.1.7: {}
 
-  path-is-absolute@1.0.1:
-    optional: true
+  patchright-core@1.57.0: {}
+
+  patchright@1.57.0:
+    dependencies:
+      patchright-core: 1.57.0
+    optionalDependencies:
+      fsevents: 2.3.2
 
   path-key@3.1.1: {}
 

@@ -5,8 +5,8 @@ import type {
   Page,
   Request,
   Response,
-} from "playwright-core";
-import { chromium } from "playwright-core";
+} from "patchright";
+import { chromium } from "patchright";
 import { formatErrorMessage } from "../infra/errors.js";
 import type { SsrFPolicy } from "../infra/net/ssrf.js";
 import { appendCdpPath, fetchJson, getHeadersWithAuth, withCdpSocket } from "./cdp.helpers.js";

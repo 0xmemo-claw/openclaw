@@ -182,6 +182,7 @@
     "node-edge-tts": "^1.2.10",
     "opusscript": "^0.0.8",
     "osc-progress": "^0.3.0",
+    "patchright": "^1.57.0",
     "pdfjs-dist": "^5.4.624",
     "playwright-core": "1.58.2",
     "qrcode-terminal": "^0.12.0",
