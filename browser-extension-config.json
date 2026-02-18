@@ -1,0 +1,65 @@
+{
+  "name": "OpenClaw Browser Extension Configuration",
+  "version": "1.0.0",
+  "description": "Configuration for running browsers with extensions (e.g., MetaMask)",
+  "profiles": {
+    "chrome-with-extensions": {
+      "browserType": "chromium",
+      "headless": false,
+      "channel": "chrome",
+      "launchOptions": {
+        "args": [
+          "--no-sandbox",
+          "--disable-setuid-sandbox",
+          "--disable-dev-shm-usage",
+          "--disable-accelerated-2d-canvas",
+          "--no-first-run",
+          "--no-zygote",
+          "--disable-gpu"
+        ]
+      },
+      "extensionSupport": {
+        "enabled": true,
+        "extensionPath": "./extensions/metamask",
+        "allowedExtensions": ["*.crx", "*.zip"],
+        "disableExtensionsExcept": [],
+        "loadExtension": null
+      },
+      "userDataDir": "./browser-data/chrome-with-extensions",
+      "cdpPort": 9222
+    },
+    "metamask-harness": {
+      "browserType": "chromium",
+      "headless": false,
+      "channel": "chrome",
+      "launchOptions": {
+        "args": [
+          "--no-sandbox",
+          "--disable-setuid-sandbox",
+          "--disable-dev-shm-usage",
+          "--disable-accelerated-2d-canvas",
+          "--no-first-run",
+          "--no-zygote",
+          "--disable-gpu",
+          "--disable-web-security",
+          "--disable-features=VizDisplayCompositor"
+        ]
+      },
+      "extensionSupport": {
+        "enabled": true,
+        "extensionPath": "./extensions/metamask",
+        "allowedExtensions": ["*.crx", "*.zip"],
+        "disableExtensionsExcept": ["nkbihfbeogeaofhmdljebnjkhfhkfgj"],
+        "loadExtension": "./extensions/metamask"
+      },
+      "userDataDir": "./browser-data/metamask-harness",
+      "cdpPort": 9222,
+      "metamaskConfig": {
+        "seedPhrase": "test test test test test test test test test test test junk",
+        "network": "localhost",
+        "chainId": 31337,
+        "rpcUrl": "https://vfgvanuabr.eu-central-1.awsapprunner.com/"
+      }
+    }
+  }
+}
