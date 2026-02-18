@@ -1,5 +1,5 @@
-import type { CDPSession, Page } from "playwright-core";
-import { devices as playwrightDevices } from "playwright-core";
+import type { CDPSession, Page } from "patchright";
+import { devices as playwrightDevices } from "patchright";
 import { ensurePageState, getPageForTargetId } from "./pw-session.js";
 
 async function withCdpSession<T>(page: Page, fn: (session: CDPSession) => Promise<T>): Promise<T> {
