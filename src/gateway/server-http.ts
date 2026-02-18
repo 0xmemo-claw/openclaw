@@ -126,8 +126,13 @@ function resolveBundledNoVncRoot(): string | null {
   // Prefer vendor/novnc/core (ESM source, browser-compatible) over npm package (CJS)
   const moduleDir = path.dirname(fileURLToPath(import.meta.url));
   const candidates = [
+    // Local dev: dist/ -> ../vendor/novnc
+    path.resolve(moduleDir, "..", "vendor", "novnc"),
+    // npm global install: dist/ -> ../vendor/novnc (same level)
     path.resolve(moduleDir, "..", "..", "vendor", "novnc"),
+    // CWD fallback
     path.resolve(process.cwd(), "vendor", "novnc"),
+    // npm package fallback
     path.resolve(process.cwd(), "node_modules", "@novnc", "novnc"),
     path.resolve(moduleDir, "..", "..", "node_modules", "@novnc", "novnc"),
   ];
