@@ -296,13 +296,18 @@ export async function launchOpenClawChrome(
     // Always open a blank tab to ensure a target exists.
     args.push("about:blank");
 
+    const spawnEnv: NodeJS.ProcessEnv = {
+      ...process.env,
+      // Reduce accidental sharing with the user's env.
+      HOME: os.homedir(),
+    };
+    // Ensure DISPLAY is set for headless Chrome on Linux
+    if (process.platform === "linux" && !spawnEnv.DISPLAY) {
+      spawnEnv.DISPLAY = ":99";
+    }
     return spawn(exe.path, args, {
       stdio: "pipe",
-      env: {
-        ...process.env,
-        // Reduce accidental sharing with the user's env.
-        HOME: os.homedir(),
-      },
+      env: spawnEnv,
     });
   };
 
