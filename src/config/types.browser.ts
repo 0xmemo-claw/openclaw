@@ -39,6 +39,24 @@ export type BrowserStealthConfig = {
   };
 };
 
+export type BrowserExtensionConfig = {
+  /** Enable extension loading for unpacked Chrome extensions. */
+  enabled?: boolean;
+  /**
+   * Paths to unpacked extension directories.
+   *
+   * Supported formats:
+   * - "~/.openclaw/extensions/metamask" (home expansion)
+   * - "$HOME/.openclaw/extensions/rabby" (env expansion)
+   *
+   * How to get unpacked extensions:
+   * - Download from Chrome Web Store and extract the .crx package
+   * - Reuse an unpacked folder exported by another browser via --extensions-path
+   * - Download unpacked releases from vendor GitHub releases (MetaMask, Rabby, Phantom, etc.)
+   */
+  paths?: string[];
+};
+
 export type BrowserConfig = {
   enabled?: boolean;
   /** If false, disable browser act:evaluate (arbitrary JS). Default: true */
@@ -67,6 +85,8 @@ export type BrowserConfig = {
   stealth?: BrowserStealthConfig;
   /** Default snapshot options (applied by the browser tool/CLI when unset). */
   snapshotDefaults?: BrowserSnapshotDefaults;
+  /** Generic unpacked Chrome extension loading config. */
+  extensions?: BrowserExtensionConfig;
   /**
    * Additional Chrome launch arguments.
    * Useful for stealth flags, window size overrides, or custom user-agent strings.
