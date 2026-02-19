@@ -1,5 +1,6 @@
 import type {
   BrowserConfig,
+  BrowserExtensionConfig,
   BrowserProfileConfig,
   BrowserStealthConfig,
   OpenClawConfig,
@@ -39,7 +40,13 @@ export type ResolvedBrowserConfig = {
   profiles: Record<string, BrowserProfileConfig>;
   ssrfPolicy?: SsrFPolicy;
   extraArgs: string[];
+  extensions: ResolvedBrowserExtensionConfig;
   stealth: ResolvedStealthConfig;
+};
+
+export type ResolvedBrowserExtensionConfig = {
+  enabled: boolean;
+  paths: string[];
 };
 
 export type ResolvedStealthConfig = {
@@ -230,6 +237,7 @@ export function resolveBrowserConfig(
   const executablePath = cfg?.executablePath?.trim() || undefined;
 
   const stealth = resolveStealthConfig(cfg?.stealth);
+  const extensions = resolveExtensionConfig(cfg?.extensions);
 
   const defaultProfileFromConfig = cfg?.defaultProfile?.trim() || undefined;
   // Use legacy cdpUrl port for backward compatibility when no profiles configured
@@ -268,7 +276,17 @@ export function resolveBrowserConfig(
     profiles,
     ssrfPolicy,
     extraArgs,
+    extensions,
     stealth,
+  };
+}
+
+function resolveExtensionConfig(
+  raw: BrowserExtensionConfig | undefined,
+): ResolvedBrowserExtensionConfig {
+  return {
+    enabled: raw?.enabled === true,
+    paths: Array.isArray(raw?.paths) ? raw.paths.filter((p) => p && p.trim().length > 0) : [],
   };
 }
 

@@ -183,19 +183,35 @@ function stripProxyCredentials(proxyUrl: string): string {
   }
 }
 
-/**
- * Resolve the MetaMask extension path from the OpenClaw config directory.
- * Returns null if the extension does not exist.
- */
-function resolveMetaMaskExtensionPath(): string | null {
-  const extensionPath = path.join(CONFIG_DIR, "browser", "extensions", "metamask");
-  if (exists(extensionPath)) {
-    const manifestPath = path.join(extensionPath, "manifest.json");
-    if (exists(manifestPath)) {
-      return extensionPath;
-    }
+function expandConfigPath(value: string): string {
+  return value
+    .replace(/^~(?=\/|$)/, os.homedir())
+    .replace(/\$\{([^}]+)\}/g, (_, name: string) => process.env[name] ?? "")
+    .replace(/\$([A-Za-z_][A-Za-z0-9_]*)/g, (_, name: string) => process.env[name] ?? "");
+}
+
+function resolveConfiguredExtensionPaths(resolved: ResolvedBrowserConfig): string[] {
+  if (!resolved.extensions?.enabled || !Array.isArray(resolved.extensions.paths)) {
+    return [];
   }
-  return null;
+
+  const validPaths: string[] = [];
+  for (const configuredPath of resolved.extensions.paths) {
+    const expandedPath = expandConfigPath(configuredPath).trim();
+    if (!expandedPath) {
+      continue;
+    }
+    const manifestPath = path.join(expandedPath, "manifest.json");
+    if (!exists(expandedPath) || !exists(manifestPath)) {
+      log.warn(
+        `Skipping browser extension path (missing directory or manifest.json): ${expandedPath}`,
+      );
+      continue;
+    }
+    validPaths.push(expandedPath);
+  }
+
+  return validPaths;
 }
 
 export async function launchOpenClawChrome(
@@ -234,8 +250,8 @@ export async function launchOpenClawChrome(
     }
   }
 
-  // Resolve extension path if this profile uses the extension driver
-  const extensionPath = profile.driver === "extension" ? resolveMetaMaskExtensionPath() : null;
+  // Resolve extension paths from browser.extensions config.
+  const extensionPaths = resolveConfiguredExtensionPaths(resolved);
 
   // First launch to create preference files if missing, then decorate and relaunch.
   const spawnOnce = () => {
@@ -257,8 +273,8 @@ export async function launchOpenClawChrome(
     if (resolved.stealth.enabled) {
       args.push(
         "--disable-infobars",
-        // Only disable extensions if we're not loading any extensions
-        ...(extensionPath ? [] : ["--disable-extensions"]),
+        // Keep extensions enabled when custom unpacked extensions are configured.
+        ...(extensionPaths.length > 0 ? [] : ["--disable-extensions"]),
         "--disable-preconnect",
         "--disable-default-apps",
         "--disable-hang-monitor",
@@ -294,8 +310,11 @@ export async function launchOpenClawChrome(
     }
 
     // === Extension loading ===
-    if (extensionPath) {
-      args.push(`--load-extension=${extensionPath}`);
+    if (extensionPaths.length > 0) {
+      const extensionArg = extensionPaths.join(",");
+      args.push(`--disable-extensions-except=${extensionArg}`);
+      args.push(`--load-extension=${extensionArg}`);
+      log.info(`Loading unpacked Chrome extensions: ${extensionArg}`);
     }
 
     if (resolved.headless) {
