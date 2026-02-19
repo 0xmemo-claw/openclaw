@@ -596,6 +596,74 @@ export function findChromeExecutableWindows(): BrowserExecutable | null {
   return findFirstExecutable(candidates);
 }
 
+/**
+ * Detect patchright/playwright bundled chromium browser.
+ * Patchright installs chromium to ~/.cache/ms-playwright/chromium-XXXX/
+ * We prioritize patchright's patched chromium (version 1200) over system browsers for anti-detection.
+ * Playwright uses higher version numbers (1208+) while patchright uses 1200.
+ */
+function detectPatchrightChromium(): BrowserExecutable | null {
+  const cacheDir = path.join(os.homedir(), ".cache", "ms-playwright");
+  if (!exists(cacheDir)) {
+    return null;
+  }
+
+  // Find chromium directories (e.g., chromium-1200, chromium-1208)
+  let entries: string[];
+  try {
+    entries = fs.readdirSync(cacheDir);
+  } catch {
+    return null;
+  }
+
+  const chromiumDirs = entries
+    .filter((e) => e.startsWith("chromium-") && !e.includes("headless"))
+    .toSorted((a, b) => {
+      // Prefer patchright's 1200 version over playwright's 1208+
+      const aNum = parseInt(a.replace("chromium-", ""), 10);
+      const bNum = parseInt(b.replace("chromium-", ""), 10);
+      // Patchright uses 1200, playwright uses 1208+
+      // Sort so 1200 comes first if both exist
+      if (aNum === 1200) {
+        return -1;
+      }
+      if (bNum === 1200) {
+        return 1;
+      }
+      return bNum - aNum; // Otherwise prefer newer
+    });
+
+  for (const dir of chromiumDirs) {
+    // Linux path
+    const linuxPath = path.join(cacheDir, dir, "chrome-linux", "chrome");
+    if (exists(linuxPath)) {
+      return { kind: "chromium", path: linuxPath };
+    }
+
+    // macOS path
+    const macPath = path.join(
+      cacheDir,
+      dir,
+      "chrome-mac",
+      "Chromium.app",
+      "Contents",
+      "MacOS",
+      "Chromium",
+    );
+    if (exists(macPath)) {
+      return { kind: "chromium", path: macPath };
+    }
+
+    // Windows path
+    const winPath = path.join(cacheDir, dir, "chrome-win", "chrome.exe");
+    if (exists(winPath)) {
+      return { kind: "chromium", path: winPath };
+    }
+  }
+
+  return null;
+}
+
 export function resolveBrowserExecutableForPlatform(
   resolved: ResolvedBrowserConfig,
   platform: NodeJS.Platform,
@@ -605,6 +673,12 @@ export function resolveBrowserExecutableForPlatform(
       throw new Error(`browser.executablePath not found: ${resolved.executablePath}`);
     }
     return { kind: "custom", path: resolved.executablePath };
+  }
+
+  // Prioritize patchright's patched chromium for anti-detection
+  const patchright = detectPatchrightChromium();
+  if (patchright) {
+    return patchright;
   }
 
   const detected = detectDefaultChromiumExecutable(platform);
