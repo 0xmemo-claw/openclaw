@@ -183,6 +183,21 @@ function stripProxyCredentials(proxyUrl: string): string {
   }
 }
 
+/**
+ * Resolve the MetaMask extension path from the OpenClaw config directory.
+ * Returns null if the extension does not exist.
+ */
+function resolveMetaMaskExtensionPath(): string | null {
+  const extensionPath = path.join(CONFIG_DIR, "browser", "extensions", "metamask");
+  if (exists(extensionPath)) {
+    const manifestPath = path.join(extensionPath, "manifest.json");
+    if (exists(manifestPath)) {
+      return extensionPath;
+    }
+  }
+  return null;
+}
+
 export async function launchOpenClawChrome(
   resolved: ResolvedBrowserConfig,
   profile: ResolvedBrowserProfile,
@@ -219,6 +234,9 @@ export async function launchOpenClawChrome(
     }
   }
 
+  // Resolve extension path if this profile uses the extension driver
+  const extensionPath = profile.driver === "extension" ? resolveMetaMaskExtensionPath() : null;
+
   // First launch to create preference files if missing, then decorate and relaunch.
   const spawnOnce = () => {
     const args: string[] = [
@@ -239,7 +257,8 @@ export async function launchOpenClawChrome(
     if (resolved.stealth.enabled) {
       args.push(
         "--disable-infobars",
-        "--disable-extensions",
+        // Only disable extensions if we're not loading any extensions
+        ...(extensionPath ? [] : ["--disable-extensions"]),
         "--disable-preconnect",
         "--disable-default-apps",
         "--disable-hang-monitor",
@@ -272,6 +291,11 @@ export async function launchOpenClawChrome(
     // === Custom user agent ===
     if (resolved.stealth.userAgent) {
       args.push(`--user-agent=${resolved.stealth.userAgent}`);
+    }
+
+    // === Extension loading ===
+    if (extensionPath) {
+      args.push(`--load-extension=${extensionPath}`);
     }
 
     if (resolved.headless) {
