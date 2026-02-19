@@ -183,6 +183,37 @@ function stripProxyCredentials(proxyUrl: string): string {
   }
 }
 
+function expandConfigPath(value: string): string {
+  return value
+    .replace(/^~(?=\/|$)/, os.homedir())
+    .replace(/\$\{([^}]+)\}/g, (_, name: string) => process.env[name] ?? "")
+    .replace(/\$([A-Za-z_][A-Za-z0-9_]*)/g, (_, name: string) => process.env[name] ?? "");
+}
+
+function resolveConfiguredExtensionPaths(resolved: ResolvedBrowserConfig): string[] {
+  if (!resolved.extensions?.enabled || !Array.isArray(resolved.extensions.paths)) {
+    return [];
+  }
+
+  const validPaths: string[] = [];
+  for (const configuredPath of resolved.extensions.paths) {
+    const expandedPath = expandConfigPath(configuredPath).trim();
+    if (!expandedPath) {
+      continue;
+    }
+    const manifestPath = path.join(expandedPath, "manifest.json");
+    if (!exists(expandedPath) || !exists(manifestPath)) {
+      log.warn(
+        `Skipping browser extension path (missing directory or manifest.json): ${expandedPath}`,
+      );
+      continue;
+    }
+    validPaths.push(expandedPath);
+  }
+
+  return validPaths;
+}
+
 export async function launchOpenClawChrome(
   resolved: ResolvedBrowserConfig,
   profile: ResolvedBrowserProfile,
@@ -219,6 +250,9 @@ export async function launchOpenClawChrome(
     }
   }
 
+  // Resolve extension paths from browser.extensions config.
+  const extensionPaths = resolveConfiguredExtensionPaths(resolved);
+
   // First launch to create preference files if missing, then decorate and relaunch.
   const spawnOnce = () => {
     const args: string[] = [
@@ -239,7 +273,8 @@ export async function launchOpenClawChrome(
     if (resolved.stealth.enabled) {
       args.push(
         "--disable-infobars",
-        "--disable-extensions",
+        // Keep extensions enabled when custom unpacked extensions are configured.
+        ...(extensionPaths.length > 0 ? [] : ["--disable-extensions"]),
         "--disable-preconnect",
         "--disable-default-apps",
         "--disable-hang-monitor",
@@ -272,6 +307,14 @@ export async function launchOpenClawChrome(
     // === Custom user agent ===
     if (resolved.stealth.userAgent) {
       args.push(`--user-agent=${resolved.stealth.userAgent}`);
+    }
+
+    // === Extension loading ===
+    if (extensionPaths.length > 0) {
+      const extensionArg = extensionPaths.join(",");
+      args.push(`--disable-extensions-except=${extensionArg}`);
+      args.push(`--load-extension=${extensionArg}`);
+      log.info(`Loading unpacked Chrome extensions: ${extensionArg}`);
     }
 
     if (resolved.headless) {

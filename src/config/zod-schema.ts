@@ -1,3 +1,4 @@
+import os from "node:os";
 import { z } from "zod";
 import { ToolsSchema } from "./zod-schema.agent-runtime.js";
 import { AgentsSchema, AudioSchema, BindingsSchema, BroadcastSchema } from "./zod-schema.agents.js";
@@ -13,6 +14,22 @@ import {
   SessionSchema,
   SessionSendPolicySchema,
 } from "./zod-schema.session.js";
+
+const expandConfigPath = (value: string): string => {
+  const homeDir = os.homedir();
+  return value
+    .replace(/^~(?=\/|$)/, homeDir)
+    .replace(/\$\{([^}]+)\}/g, (_, name: string) => process.env[name] ?? "")
+    .replace(/\$([A-Za-z_][A-Za-z0-9_]*)/g, (_, name: string) => process.env[name] ?? "");
+};
+
+const BrowserExtensionSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    paths: z.array(z.string().transform((value) => expandConfigPath(value))).optional(),
+  })
+  .strict()
+  .optional();
 
 const BrowserSnapshotDefaultsSchema = z
   .object({
@@ -242,6 +259,7 @@ export const OpenClawSchema = z
           .strict()
           .optional(),
         snapshotDefaults: BrowserSnapshotDefaultsSchema,
+        extensions: BrowserExtensionSchema,
         profiles: z
           .record(
             z
