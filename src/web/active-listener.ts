@@ -1,5 +1,6 @@
-import { formatCliCommand } from "../cli/command-format.js";
 import type { PollInput } from "../polls.js";
+import type { StoredMessage, ChatSummary } from "./whatsapp-message-store.js";
+import { formatCliCommand } from "../cli/command-format.js";
 import { DEFAULT_ACCOUNT_ID } from "../routing/session-key.js";
 
 export type ActiveWebSendOptions = {
@@ -26,11 +27,30 @@ export type ActiveWebListener = {
   ) => Promise<void>;
   sendComposingTo: (to: string) => Promise<void>;
   close?: () => Promise<void>;
+  fetchMessageHistory?: (chatJid: string, count: number) => Promise<void>;
+  getMessages?: (chatJid: string, limit?: number) => Promise<StoredMessage[]>;
+  searchMessages?: (query: string, chatJid?: string, limit?: number) => Promise<StoredMessage[]>;
+  listChats?: () => Promise<ChatSummary[]>;
+  fetchAllGroups?: () => Promise<Array<{ jid: string; subject: string; participants?: number }>>;
+  getContactName?: (jid: string) => string | undefined;
+  setContactName?: (jid: string, name: string) => void;
+  resolveContactByName?: (query: string) => Array<{ jid: string; name: string }>;
 };
 
 let _currentListener: ActiveWebListener | null = null;
 
-const listeners = new Map<string, ActiveWebListener>();
+// Use globalThis to ensure singleton state across code-split chunks.
+// Without this, each bundled chunk gets its own Map instance, so
+// setActiveWebListener (in the monitor chunk) and requireActiveWebListener
+// (in the reply/tool chunk) operate on different Maps.
+const GLOBAL_KEY = "__openclaw_web_listeners__";
+const listeners: Map<string, ActiveWebListener> =
+  ((globalThis as Record<string, unknown>)[GLOBAL_KEY] as Map<string, ActiveWebListener>) ??
+  (() => {
+    const m = new Map<string, ActiveWebListener>();
+    (globalThis as Record<string, unknown>)[GLOBAL_KEY] = m;
+    return m;
+  })();
 
 export function resolveWebAccountId(accountId?: string | null): string {
   return (accountId ?? "").trim() || DEFAULT_ACCOUNT_ID;

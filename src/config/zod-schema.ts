@@ -94,14 +94,6 @@ const MemorySchema = z
   .strict()
   .optional();
 
-const HttpUrlSchema = z
-  .string()
-  .url()
-  .refine((value) => {
-    const protocol = new URL(value).protocol;
-    return protocol === "http:" || protocol === "https:";
-  }, "Expected http:// or https:// URL");
-
 export const OpenClawSchema = z
   .object({
     $schema: z.string().optional(),
@@ -220,6 +212,35 @@ export const OpenClawSchema = z
         noSandbox: z.boolean().optional(),
         attachOnly: z.boolean().optional(),
         defaultProfile: z.string().optional(),
+        stealth: z
+          .object({
+            enabled: z.boolean().optional(),
+            proxy: z
+              .object({
+                url: z.string().optional(),
+                bypassList: z.array(z.string()).optional(),
+              })
+              .strict()
+              .optional(),
+            userAgent: z.string().optional(),
+            geolocation: z
+              .object({
+                latitude: z.number().min(-90).max(90).optional(),
+                longitude: z.number().min(-180).max(180).optional(),
+                city: z.string().optional(),
+              })
+              .strict()
+              .optional(),
+            captcha: z
+              .object({
+                provider: z.union([z.literal("2captcha"), z.literal("capsolver")]).optional(),
+                apiKey: z.string().optional(),
+              })
+              .strict()
+              .optional(),
+          })
+          .strict()
+          .optional(),
         snapshotDefaults: BrowserSnapshotDefaultsSchema,
         profiles: z
           .record(
@@ -304,8 +325,6 @@ export const OpenClawSchema = z
         enabled: z.boolean().optional(),
         store: z.string().optional(),
         maxConcurrentRuns: z.number().int().positive().optional(),
-        webhook: HttpUrlSchema.optional(),
-        webhookToken: z.string().optional().register(sensitive),
         sessionRetention: z.union([z.string(), z.literal(false)]).optional(),
       })
       .strict()
@@ -554,6 +573,18 @@ export const OpenClawSchema = z
               .optional(),
             allowCommands: z.array(z.string()).optional(),
             denyCommands: z.array(z.string()).optional(),
+          })
+          .strict()
+          .optional(),
+        browser: z
+          .object({
+            vnc: z
+              .object({
+                enabled: z.boolean().optional(),
+                vncPort: z.number().int().positive().optional(),
+              })
+              .strict()
+              .optional(),
           })
           .strict()
           .optional(),
