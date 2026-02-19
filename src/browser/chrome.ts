@@ -22,6 +22,7 @@ import {
   DEFAULT_OPENCLAW_BROWSER_COLOR,
   DEFAULT_OPENCLAW_BROWSER_PROFILE_NAME,
 } from "./constants.js";
+import { hasProxyCredentials, startLocalProxyChain, stopAllLocalProxies } from "./proxy-chain.js";
 
 const log = createSubsystemLogger("browser").child("chrome");
 
@@ -164,15 +165,18 @@ export async function isChromeCdpReady(
  * Strip credentials (user:pass@) from a proxy URL.
  * Chrome's --proxy-server flag does not support embedded credentials —
  * passing them causes net::ERR_NO_SUPPORTED_PROXIES.
- * Returns the URL with only scheme://host:port.
+ * Returns the URL with only scheme://host:port (no trailing slash).
  */
 function stripProxyCredentials(proxyUrl: string): string {
   try {
     const u = new URL(proxyUrl);
-    // Clear credentials
+    // Clear credentials and return clean scheme://host:port
     u.username = "";
     u.password = "";
-    return u.toString();
+    u.pathname = "";
+    u.search = "";
+    u.hash = "";
+    return u.toString().replace(/\/$/, "");
   } catch {
     // If URL parsing fails, return as-is and let Chrome deal with it
     return proxyUrl;
@@ -203,6 +207,17 @@ export async function launchOpenClawChrome(
     profile.name,
     (profile.color ?? DEFAULT_OPENCLAW_BROWSER_COLOR).toUpperCase(),
   );
+
+  // Start local proxy-chain if upstream proxy has credentials
+  // This must happen before spawnOnce() is called
+  let proxyUrlForChrome: string | undefined;
+  if (resolved.stealth.proxy?.url) {
+    if (hasProxyCredentials(resolved.stealth.proxy.url)) {
+      proxyUrlForChrome = await startLocalProxyChain(resolved.stealth.proxy.url);
+    } else {
+      proxyUrlForChrome = stripProxyCredentials(resolved.stealth.proxy.url);
+    }
+  }
 
   // First launch to create preference files if missing, then decorate and relaunch.
   const spawnOnce = () => {
@@ -247,14 +262,9 @@ export async function launchOpenClawChrome(
     }
 
     // === Proxy flags ===
-    if (resolved.stealth.proxy?.url) {
-      // Chrome's --proxy-server does NOT support credentials embedded in the URL
-      // (e.g. http://user:pass@host:port causes net::ERR_NO_SUPPORTED_PROXIES).
-      // Strip credentials and pass only scheme://host:port to Chrome.
-      // Proxy auth is handled separately at the Playwright context level.
-      const strippedProxyUrl = stripProxyCredentials(resolved.stealth.proxy.url);
-      args.push(`--proxy-server=${strippedProxyUrl}`);
-      if (resolved.stealth.proxy.bypassList.length > 0) {
+    if (proxyUrlForChrome) {
+      args.push(`--proxy-server=${proxyUrlForChrome}`);
+      if (resolved.stealth.proxy?.bypassList?.length) {
         args.push(`--proxy-bypass-list=${resolved.stealth.proxy.bypassList.join(";")}`);
       }
     }
@@ -393,6 +403,10 @@ export async function stopOpenClawChrome(running: RunningChrome, timeoutMs = 250
   if (proc.killed) {
     return;
   }
+
+  // Stop any local proxy-chain servers we started
+  await stopAllLocalProxies().catch(() => {});
+
   try {
     proc.kill("SIGTERM");
   } catch {
