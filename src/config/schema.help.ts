@@ -47,6 +47,10 @@ export const FIELD_HELP: Record<string, string> = {
     "Extra node.invoke commands to allow beyond the gateway defaults (array of command strings).",
   "gateway.nodes.denyCommands":
     "Commands to block even if present in node claims or default allowlist.",
+  "gateway.browser.vnc.enabled":
+    "Enable embedded noVNC viewer and built-in Xvfb + x11vnc process management in gateway.",
+  "gateway.browser.vnc.vncPort":
+    "Local TCP port where x11vnc listens (default: 5900). Gateway bridges this to WebSocket for noVNC.",
   "nodeHost.browserProxy.enabled": "Expose the local browser control server via node proxy.",
   "nodeHost.browserProxy.allowProfiles":
     "Optional allowlist of browser profile names exposed via the node proxy.",

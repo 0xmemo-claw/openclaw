@@ -1,6 +1,7 @@
 import type { BrowserRouteContext } from "../server-context.js";
 import { registerBrowserAgentRoutes } from "./agent.js";
 import { registerBrowserBasicRoutes } from "./basic.js";
+import { registerCaptchaRoutes } from "./captcha.js";
 import { registerBrowserTabRoutes } from "./tabs.js";
 import type { BrowserRouteRegistrar } from "./types.js";
 
@@ -8,4 +9,5 @@ export function registerBrowserRoutes(app: BrowserRouteRegistrar, ctx: BrowserRo
   registerBrowserBasicRoutes(app, ctx);
   registerBrowserTabRoutes(app, ctx);
   registerBrowserAgentRoutes(app, ctx);
+  registerCaptchaRoutes(app, ctx);
 }

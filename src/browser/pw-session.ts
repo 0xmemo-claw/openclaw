@@ -1,16 +1,10 @@
-import type {
-  Browser,
-  BrowserContext,
-  ConsoleMessage,
-  Page,
-  Request,
-  Response,
-} from "playwright-core";
-import { chromium } from "playwright-core";
+import type { Browser, BrowserContext, ConsoleMessage, Page, Request, Response } from "patchright";
+import { chromium } from "patchright";
 import { formatErrorMessage } from "../infra/errors.js";
 import { appendCdpPath, fetchJson, getHeadersWithAuth, withCdpSocket } from "./cdp.helpers.js";
 import { normalizeCdpWsUrl } from "./cdp.js";
 import { getChromeWebSocketUrl } from "./chrome.js";
+import { type StealthScriptOptions, getAllStealthScripts } from "./stealth.js";
 
 export type BrowserConsoleMessage = {
   type: string;
@@ -102,6 +96,31 @@ const MAX_NETWORK_REQUESTS = 500;
 
 let cached: ConnectedBrowser | null = null;
 let connecting: Promise<ConnectedBrowser> | null = null;
+
+/** Module-level stealth options, set via setStealthOptions(). */
+let _stealthOpts: StealthScriptOptions | undefined;
+
+/**
+ * Configure stealth script options (geolocation, user agent, etc.).
+ * Called once during browser initialization from the resolved config.
+ */
+export function setStealthOptions(opts: StealthScriptOptions | undefined): void {
+  _stealthOpts = opts;
+}
+
+/** Module-level proxy credentials for authenticated proxy support. */
+let _proxyCredentials: { username: string; password: string } | undefined;
+
+/**
+ * Configure proxy credentials for authenticated proxy support.
+ * These are applied to pages when Chrome's proxy requires authentication.
+ * Called once during browser initialization from the resolved config.
+ */
+export function setProxyCredentials(
+  creds: { username: string; password: string } | undefined,
+): void {
+  _proxyCredentials = creds;
+}
 
 function normalizeCdpUrl(raw: string) {
   return raw.replace(/\/$/, "");
@@ -304,7 +323,116 @@ export function ensureContextState(context: BrowserContext): ContextState {
   }
   const state: ContextState = { traceActive: false };
   contextStates.set(context, state);
+
+  // Inject stealth scripts to avoid bot detection
+  injectStealthScripts(context);
+
+  // Set proxy credentials if configured so Chrome can authenticate with the proxy
+  if (_proxyCredentials) {
+    injectProxyCredentials(context, _proxyCredentials);
+  }
+
   return state;
+}
+
+/**
+ * Inject proxy credentials into a browser context via CDP Fetch domain.
+ * Enables Fetch interception so we can respond to proxy 407 auth challenges.
+ *
+ * NOTE: This is a FALLBACK for when proxy-chain is not used.
+ * The preferred approach is to use proxy-chain (started in chrome.ts) which
+ * creates a local proxy that handles auth transparently, avoiding timing issues.
+ *
+ * This CDP-based approach may not intercept the first 407 challenge in time
+ * if the page navigates before Fetch.enable completes.
+ */
+function injectProxyCredentials(
+  context: BrowserContext,
+  credentials: { username: string; password: string },
+): void {
+  // Track which pages have proxy auth enabled
+  const pagesWithProxyAuth = new WeakSet<Page>();
+
+  const enableProxyAuth = async (page: Page): Promise<void> => {
+    // Skip if already enabled for this page
+    if (pagesWithProxyAuth.has(page)) {
+      return;
+    }
+
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const session = (await page.context().newCDPSession(page)) as any;
+
+      // Enable Fetch interception for auth challenges
+      await session.send("Fetch.enable", { handleAuthRequests: true });
+
+      // Mark this page as having proxy auth enabled
+      pagesWithProxyAuth.add(page);
+
+      // Handle proxy authentication challenges (407)
+      session.on(
+        "Fetch.authRequired",
+        (event: { requestId: string; authChallenge?: { source?: string } }) => {
+          if (event.authChallenge?.source === "Proxy") {
+            session
+              .send("Fetch.continueWithAuth", {
+                requestId: event.requestId,
+                authChallengeResponse: {
+                  response: "ProvideCredentials",
+                  username: credentials.username,
+                  password: credentials.password,
+                },
+              })
+              .catch(() => {});
+          } else {
+            // For non-proxy auth (e.g., HTTP Basic), let browser handle it
+            session
+              .send("Fetch.continueWithAuth", {
+                requestId: event.requestId,
+                authChallengeResponse: { response: "Default" },
+              })
+              .catch(() => {});
+          }
+        },
+      );
+
+      // Must handle requestPaused events when Fetch is enabled
+      session.on("Fetch.requestPaused", (event: { requestId: string }) => {
+        session.send("Fetch.continueRequest", { requestId: event.requestId }).catch(() => {});
+      });
+
+      // Clean up on page close
+      page.on("close", () => {
+        pagesWithProxyAuth.delete(page);
+      });
+    } catch {
+      // Ignore errors — CDP session may not be available in all contexts
+    }
+  };
+
+  // Apply to existing pages
+  const existingPages = context.pages();
+  for (const page of existingPages) {
+    void enableProxyAuth(page);
+  }
+
+  // Listen for new pages
+  context.on("page", (page) => {
+    void enableProxyAuth(page);
+  });
+}
+
+/**
+ * Inject stealth scripts into a browser context.
+ * These scripts run before any page scripts to modify browser fingerprints.
+ */
+function injectStealthScripts(context: BrowserContext): void {
+  const scripts = getAllStealthScripts(_stealthOpts);
+  for (const script of scripts) {
+    context.addInitScript(script).catch(() => {
+      // Ignore errors - init script injection might fail if context is closed
+    });
+  }
 }
 
 function observeBrowser(browser: Browser) {

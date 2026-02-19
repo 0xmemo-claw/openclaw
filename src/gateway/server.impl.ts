@@ -84,6 +84,7 @@ import {
   refreshGatewayHealthSnapshot,
 } from "./server/health-state.js";
 import { loadGatewayTlsRuntime } from "./server/tls.js";
+import { VncProcessManager } from "./vnc-process-manager.js";
 
 export { __resetModelCatalogCacheForTest } from "./server-model-catalog.js";
 
@@ -278,12 +279,26 @@ export async function startGatewayServer(
     openResponsesConfig,
     controlUiBasePath,
     controlUiRoot: controlUiRootOverride,
+    vncEnabled,
+    vncPort,
     resolvedAuth,
     tailscaleConfig,
     tailscaleMode,
   } = runtimeConfig;
   let hooksConfig = runtimeConfig.hooksConfig;
   const canvasHostEnabled = runtimeConfig.canvasHostEnabled;
+
+  let vncProcessManager: VncProcessManager | null = null;
+  if (vncEnabled) {
+    vncProcessManager = new VncProcessManager({
+      vncPort,
+      log: log.child("vnc"),
+    });
+    const started = await vncProcessManager.start();
+    if (!started) {
+      log.warn("gateway: browser.vnc.enabled=true but VNC process manager failed to start");
+    }
+  }
 
   // Create auth rate limiter only when explicitly configured.
   const rateLimitConfig = cfgAtStart.gateway?.auth?.rateLimit;
@@ -357,6 +372,8 @@ export async function startGatewayServer(
     controlUiEnabled,
     controlUiBasePath,
     controlUiRoot: controlUiRootState,
+    vncEnabled,
+    vncPort,
     openAiChatCompletionsEnabled,
     openResponsesEnabled,
     openResponsesConfig,
@@ -708,6 +725,7 @@ export async function startGatewayServer(
     clients,
     configReloader,
     browserControl,
+    vncProcessManager,
     wss,
     httpServer,
     httpServers,

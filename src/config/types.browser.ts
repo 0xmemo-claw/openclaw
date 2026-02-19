@@ -12,6 +12,33 @@ export type BrowserSnapshotDefaults = {
   /** Default snapshot mode (applies when mode is not provided). */
   mode?: "efficient";
 };
+export type BrowserStealthConfig = {
+  /** Enable stealth scripts injection. Default: true */
+  enabled?: boolean;
+  /** Proxy configuration for stealth browsing. */
+  proxy?: {
+    /** Proxy URL (supports ${ENV_VAR} syntax), e.g. "${BROWSER_PROXY_URL}" or "http://user:pass@proxy.com:8080" */
+    url?: string;
+    /** Domains to bypass the proxy for. */
+    bypassList?: string[];
+  };
+  /** Custom user-agent override. */
+  userAgent?: string;
+  /** Geolocation spoofing for the stealth script. */
+  geolocation?: {
+    latitude?: number;
+    longitude?: number;
+    city?: string;
+  };
+  /** CAPTCHA service configuration for automated solving. */
+  captcha?: {
+    /** CAPTCHA service provider. */
+    provider?: "2captcha" | "capsolver";
+    /** API key for the CAPTCHA service (supports ${ENV_VAR} syntax), e.g. "${TWOCAPTCHA_API_KEY}". */
+    apiKey?: string;
+  };
+};
+
 export type BrowserConfig = {
   enabled?: boolean;
   /** If false, disable browser act:evaluate (arbitrary JS). Default: true */
@@ -36,6 +63,8 @@ export type BrowserConfig = {
   defaultProfile?: string;
   /** Named browser profiles with explicit CDP ports or URLs. */
   profiles?: Record<string, BrowserProfileConfig>;
+  /** Stealth / anti-detection configuration. */
+  stealth?: BrowserStealthConfig;
   /** Default snapshot options (applied by the browser tool/CLI when unset). */
   snapshotDefaults?: BrowserSnapshotDefaults;
   /**

@@ -22,6 +22,7 @@ import {
   DEFAULT_OPENCLAW_BROWSER_COLOR,
   DEFAULT_OPENCLAW_BROWSER_PROFILE_NAME,
 } from "./constants.js";
+import { hasProxyCredentials, startLocalProxyChain, stopAllLocalProxies } from "./proxy-chain.js";
 
 const log = createSubsystemLogger("browser").child("chrome");
 
@@ -160,6 +161,28 @@ export async function isChromeCdpReady(
   return await canOpenWebSocket(wsUrl, handshakeTimeoutMs);
 }
 
+/**
+ * Strip credentials (user:pass@) from a proxy URL.
+ * Chrome's --proxy-server flag does not support embedded credentials —
+ * passing them causes net::ERR_NO_SUPPORTED_PROXIES.
+ * Returns the URL with only scheme://host:port (no trailing slash).
+ */
+function stripProxyCredentials(proxyUrl: string): string {
+  try {
+    const u = new URL(proxyUrl);
+    // Clear credentials and return clean scheme://host:port
+    u.username = "";
+    u.password = "";
+    u.pathname = "";
+    u.search = "";
+    u.hash = "";
+    return u.toString().replace(/\/$/, "");
+  } catch {
+    // If URL parsing fails, return as-is and let Chrome deal with it
+    return proxyUrl;
+  }
+}
+
 export async function launchOpenClawChrome(
   resolved: ResolvedBrowserConfig,
   profile: ResolvedBrowserProfile,
@@ -185,6 +208,17 @@ export async function launchOpenClawChrome(
     (profile.color ?? DEFAULT_OPENCLAW_BROWSER_COLOR).toUpperCase(),
   );
 
+  // Start local proxy-chain if upstream proxy has credentials
+  // This must happen before spawnOnce() is called
+  let proxyUrlForChrome: string | undefined;
+  if (resolved.stealth.proxy?.url) {
+    if (hasProxyCredentials(resolved.stealth.proxy.url)) {
+      proxyUrlForChrome = await startLocalProxyChain(resolved.stealth.proxy.url);
+    } else {
+      proxyUrlForChrome = stripProxyCredentials(resolved.stealth.proxy.url);
+    }
+  }
+
   // First launch to create preference files if missing, then decorate and relaunch.
   const spawnOnce = () => {
     const args: string[] = [
@@ -200,6 +234,45 @@ export async function launchOpenClawChrome(
       "--hide-crash-restore-bubble",
       "--password-store=basic",
     ];
+
+    // === Stealth flags ===
+    if (resolved.stealth.enabled) {
+      args.push(
+        "--disable-infobars",
+        "--disable-extensions",
+        "--disable-preconnect",
+        "--disable-default-apps",
+        "--disable-hang-monitor",
+        "--disable-popup-blocking",
+        "--disable-prompt-on-repost",
+        "--disable-client-side-phishing-detection",
+        "--disable-background-timer-throttling",
+        "--disable-backgrounding-occluded-windows",
+        "--disable-renderer-backgrounding",
+        "--lang=en-US,en",
+        "--window-size=1920,1080",
+        "--force-device-scale-factor=1",
+        "--force-color-profile=srgb",
+        "--enable-unsafe-swiftshader",
+        "--use-gl=angle",
+        "--use-angle=swiftshader-webgl",
+        "--enable-features=NetworkService,NetworkServiceInProcess",
+        "--disable-features=IsolateOrigins,site-per-process,TranslateUI",
+      );
+    }
+
+    // === Proxy flags ===
+    if (proxyUrlForChrome) {
+      args.push(`--proxy-server=${proxyUrlForChrome}`);
+      if (resolved.stealth.proxy?.bypassList?.length) {
+        args.push(`--proxy-bypass-list=${resolved.stealth.proxy.bypassList.join(";")}`);
+      }
+    }
+
+    // === Custom user agent ===
+    if (resolved.stealth.userAgent) {
+      args.push(`--user-agent=${resolved.stealth.userAgent}`);
+    }
 
     if (resolved.headless) {
       // Best-effort; older Chromes may ignore.
@@ -225,13 +298,18 @@ export async function launchOpenClawChrome(
     // Always open a blank tab to ensure a target exists.
     args.push("about:blank");
 
+    const spawnEnv: NodeJS.ProcessEnv = {
+      ...process.env,
+      // Reduce accidental sharing with the user's env.
+      HOME: os.homedir(),
+    };
+    // Ensure DISPLAY is set for headless Chrome on Linux
+    if (process.platform === "linux" && !spawnEnv.DISPLAY) {
+      spawnEnv.DISPLAY = ":99";
+    }
     return spawn(exe.path, args, {
       stdio: "pipe",
-      env: {
-        ...process.env,
-        // Reduce accidental sharing with the user's env.
-        HOME: os.homedir(),
-      },
+      env: spawnEnv,
     });
   };
 
@@ -286,7 +364,7 @@ export async function launchOpenClawChrome(
 
   const proc = spawnOnce();
   // Wait for CDP to come up.
-  const readyDeadline = Date.now() + 15_000;
+  const readyDeadline = Date.now() + 30_000;
   while (Date.now() < readyDeadline) {
     if (await isChromeReachable(profile.cdpUrl, 500)) {
       break;
@@ -325,6 +403,10 @@ export async function stopOpenClawChrome(running: RunningChrome, timeoutMs = 250
   if (proc.killed) {
     return;
   }
+
+  // Stop any local proxy-chain servers we started
+  await stopAllLocalProxies().catch(() => {});
+
   try {
     proc.kill("SIGTERM");
   } catch {

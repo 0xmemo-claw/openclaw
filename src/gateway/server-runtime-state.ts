@@ -38,6 +38,8 @@ export async function createGatewayRuntimeState(params: {
   controlUiEnabled: boolean;
   controlUiBasePath: string;
   controlUiRoot?: ControlUiRootState;
+  vncEnabled: boolean;
+  vncPort: number;
   openAiChatCompletionsEnabled: boolean;
   openResponsesEnabled: boolean;
   openResponsesConfig?: import("../config/types.gateway.js").GatewayHttpResponsesConfig;
@@ -125,6 +127,7 @@ export async function createGatewayRuntimeState(params: {
       controlUiEnabled: params.controlUiEnabled,
       controlUiBasePath: params.controlUiBasePath,
       controlUiRoot: params.controlUiRoot,
+      vncEnabled: params.vncEnabled,
       openAiChatCompletionsEnabled: params.openAiChatCompletionsEnabled,
       openResponsesEnabled: params.openResponsesEnabled,
       openResponsesConfig: params.openResponsesConfig,
@@ -160,12 +163,19 @@ export async function createGatewayRuntimeState(params: {
     noServer: true,
     maxPayload: MAX_PAYLOAD_BYTES,
   });
+  const vncWss = params.vncEnabled
+    ? new WebSocketServer({ noServer: true, maxPayload: 8 * 1024 * 1024 })
+    : null;
   for (const server of httpServers) {
     attachGatewayUpgradeHandler({
       httpServer: server,
       wss,
+      vncWss,
       canvasHost,
       clients,
+      controlUiBasePath: params.controlUiBasePath,
+      vncEnabled: params.vncEnabled,
+      vncPort: params.vncPort,
       resolvedAuth: params.resolvedAuth,
       rateLimiter: params.rateLimiter,
     });
