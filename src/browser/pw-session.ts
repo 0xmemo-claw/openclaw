@@ -1,11 +1,4 @@
-import type {
-  Browser,
-  BrowserContext,
-  ConsoleMessage,
-  Page,
-  Request,
-  Response,
-} from "patchright";
+import type { Browser, BrowserContext, ConsoleMessage, Page, Request, Response } from "patchright";
 import { chromium } from "patchright";
 import { formatErrorMessage } from "../infra/errors.js";
 import { appendCdpPath, fetchJson, getHeadersWithAuth, withCdpSocket } from "./cdp.helpers.js";
@@ -345,19 +338,38 @@ export function ensureContextState(context: BrowserContext): ContextState {
 /**
  * Inject proxy credentials into a browser context via CDP Fetch domain.
  * Enables Fetch interception so we can respond to proxy 407 auth challenges.
- * This is the correct approach for Chrome launched externally with --proxy-server=.
+ *
+ * NOTE: This is a FALLBACK for when proxy-chain is not used.
+ * The preferred approach is to use proxy-chain (started in chrome.ts) which
+ * creates a local proxy that handles auth transparently, avoiding timing issues.
+ *
+ * This CDP-based approach may not intercept the first 407 challenge in time
+ * if the page navigates before Fetch.enable completes.
  */
 function injectProxyCredentials(
   context: BrowserContext,
   credentials: { username: string; password: string },
 ): void {
-  const enableProxyAuth = async (page: Page) => {
+  // Track which pages have proxy auth enabled
+  const pagesWithProxyAuth = new WeakSet<Page>();
+
+  const enableProxyAuth = async (page: Page): Promise<void> => {
+    // Skip if already enabled for this page
+    if (pagesWithProxyAuth.has(page)) {
+      return;
+    }
+
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const session = (await page.context().newCDPSession(page)) as any;
-      // Enable Fetch interception for auth challenges (typed as any to avoid
-      // overly-strict Playwright CDP type unions that don't play well here)
+
+      // Enable Fetch interception for auth challenges
       await session.send("Fetch.enable", { handleAuthRequests: true });
+
+      // Mark this page as having proxy auth enabled
+      pagesWithProxyAuth.add(page);
+
+      // Handle proxy authentication challenges (407)
       session.on(
         "Fetch.authRequired",
         (event: { requestId: string; authChallenge?: { source?: string } }) => {
@@ -373,6 +385,7 @@ function injectProxyCredentials(
               })
               .catch(() => {});
           } else {
+            // For non-proxy auth (e.g., HTTP Basic), let browser handle it
             session
               .send("Fetch.continueWithAuth", {
                 requestId: event.requestId,
@@ -382,21 +395,30 @@ function injectProxyCredentials(
           }
         },
       );
+
+      // Must handle requestPaused events when Fetch is enabled
       session.on("Fetch.requestPaused", (event: { requestId: string }) => {
         session.send("Fetch.continueRequest", { requestId: event.requestId }).catch(() => {});
+      });
+
+      // Clean up on page close
+      page.on("close", () => {
+        pagesWithProxyAuth.delete(page);
       });
     } catch {
       // Ignore errors — CDP session may not be available in all contexts
     }
   };
 
-  // Apply to all existing pages in the context
-  for (const page of context.pages()) {
-    enableProxyAuth(page).catch(() => {});
+  // Apply to existing pages
+  const existingPages = context.pages();
+  for (const page of existingPages) {
+    void enableProxyAuth(page);
   }
-  // Apply to future pages
+
+  // Listen for new pages
   context.on("page", (page) => {
-    enableProxyAuth(page).catch(() => {});
+    void enableProxyAuth(page);
   });
 }
 
