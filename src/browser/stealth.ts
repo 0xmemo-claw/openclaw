@@ -2,6 +2,15 @@
  * Browser stealth scripts to avoid bot detection.
  * Ports all 29 stealth signals from the browser-manager skill.
  * These scripts are injected into every page before any page scripts run.
+ *
+ * NOTE: Patchright already handles:
+ *   - navigator.webdriver (via Runtime.enable patch)
+ *   - Console.enable leak
+ *   --disable-blink-features=AutomationControlled (in chrome.ts)
+ *   --enable-automation removal
+ *
+ * The signals below complement Patchright with fingerprint randomization
+ * and other detection vectors not covered by the patched Playwright.
  */
 
 export type StealthScriptOptions = {
@@ -41,10 +50,12 @@ export function generateStealthScript(opts?: StealthScriptOptions): string {
   const srand = () => seededRandom(_sIdx++);
 
   // ======================================
-  // 1. navigator.webdriver
+  // 1. navigator.webdriver — HANDLED BY PATCHRIGHT
   // ======================================
-  Object.defineProperty(navigator, 'webdriver', { get: () => false, configurable: true });
-  delete Object.getPrototypeOf(navigator).webdriver;
+  // Patchright already patches Runtime.enable to prevent navigator.webdriver
+  // from being set to true. We keep this as a safety fallback but it's
+  // redundant with Patchright's built-in protection.
+  // Object.defineProperty(navigator, 'webdriver', { get: () => false, configurable: true });
 
   // ======================================
   // 2. Chrome runtime + app objects
