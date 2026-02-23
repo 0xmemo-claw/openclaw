@@ -268,6 +268,36 @@ export const OpenClawSchema = z
           .strict()
           .optional(),
         snapshotDefaults: BrowserSnapshotDefaultsSchema,
+        ssrfPolicy: z
+          .object({
+            enabled: z.boolean().optional(),
+            proxy: z
+              .object({
+                url: z.string().optional(),
+                bypassList: z.array(z.string()).optional(),
+              })
+              .strict()
+              .optional(),
+            userAgent: z.string().optional(),
+            geolocation: z
+              .object({
+                latitude: z.number().min(-90).max(90).optional(),
+                longitude: z.number().min(-180).max(180).optional(),
+                city: z.string().optional(),
+              })
+              .strict()
+              .optional(),
+            captcha: z
+              .object({
+                provider: z.union([z.literal("2captcha"), z.literal("capsolver")]).optional(),
+                apiKey: z.string().optional(),
+              })
+              .strict()
+              .optional(),
+          })
+          .strict()
+          .optional(),
+        snapshotDefaults: BrowserSnapshotDefaultsSchema,
         extensions: BrowserExtensionSchema,
         profiles: z
           .record(
