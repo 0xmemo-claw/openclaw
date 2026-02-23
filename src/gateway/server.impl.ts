@@ -89,6 +89,7 @@ import {
   refreshGatewayHealthSnapshot,
 } from "./server/health-state.js";
 import { loadGatewayTlsRuntime } from "./server/tls.js";
+import { ensureGatewayStartupAuth } from "./startup-auth.js";
 import { VncProcessManager } from "./vnc-process-manager.js";
 
 export { __resetModelCatalogCacheForTest } from "./server-model-catalog.js";
