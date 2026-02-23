@@ -35,7 +35,7 @@ function makeState(
       headless: true,
       noSandbox: false,
       attachOnly: false,
-      ssrfPolicy: { allowPrivateNetwork: true },
+      stealth: { enabled: true },
       defaultProfile: profile,
       profiles: {
         remote: {

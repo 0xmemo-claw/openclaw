@@ -23,6 +23,7 @@ function makeBrowserState(): BrowserServerState {
       headless: true,
       noSandbox: false,
       attachOnly: false,
+      stealth: { enabled: true },
       defaultProfile: "chrome",
       profiles: {
         chrome: {

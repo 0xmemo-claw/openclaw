@@ -311,12 +311,11 @@ export const FIELD_HELP: Record<string, string> = {
     "Extra node.invoke commands to allow beyond the gateway defaults (array of command strings). Enabling dangerous commands here is a security-sensitive override and is flagged by `openclaw security audit`.",
   "gateway.nodes.denyCommands":
     "Commands to block even if present in node claims or default allowlist.",
-  nodeHost:
-    "Node host controls for features exposed from this gateway node to other nodes or clients. Keep defaults unless you intentionally proxy local capabilities across your node network.",
-  "nodeHost.browserProxy":
-    "Groups browser-proxy settings for exposing local browser control through node routing. Enable only when remote node workflows need your local browser profiles.",
-  "nodeHost.browserProxy.enabled":
-    "Expose the local browser control server through node proxy routing so remote clients can use this host's browser capabilities. Keep disabled unless remote automation explicitly depends on it.",
+  "gateway.browser.vnc.enabled":
+    "Enable embedded noVNC viewer and built-in Xvfb + x11vnc process management in gateway.",
+  "gateway.browser.vnc.vncPort":
+    "Local TCP port where x11vnc listens (default: 5900). Gateway bridges this to WebSocket for noVNC.",
+  "nodeHost.browserProxy.enabled": "Expose the local browser control server via node proxy.",
   "nodeHost.browserProxy.allowProfiles":
     "Optional allowlist of browser profile names exposed through node proxy routing. Leave empty to expose all configured profiles, or use a tight list to enforce least-privilege profile access.",
   media:
