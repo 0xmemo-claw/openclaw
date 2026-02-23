@@ -38,6 +38,45 @@ const BrowserSnapshotDefaultsSchema = z
   .strict()
   .optional();
 
+const BrowserStealthSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    proxy: z
+      .object({
+        url: z.string().optional(),
+        bypassList: z.array(z.string()).optional(),
+      })
+      .strict()
+      .optional(),
+    userAgent: z.string().optional(),
+    geolocation: z
+      .object({
+        latitude: z.number().min(-90).max(90).optional(),
+        longitude: z.number().min(-180).max(180).optional(),
+        city: z.string().optional(),
+      })
+      .strict()
+      .optional(),
+    captcha: z
+      .object({
+        provider: z.union([z.literal("2captcha"), z.literal("capsolver")]).optional(),
+        apiKey: z.string().optional(),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict()
+  .optional();
+
+const BrowserSsrFPolicySchema = z
+  .object({
+    allowPrivateNetwork: z.boolean().optional(),
+    allowedHostnames: z.array(z.string()).optional(),
+    hostnameAllowlist: z.array(z.string()).optional(),
+  })
+  .strict()
+  .optional();
+
 const NodeHostSchema = z
   .object({
     browserProxy: z
@@ -238,36 +277,9 @@ export const OpenClawSchema = z
         noSandbox: z.boolean().optional(),
         attachOnly: z.boolean().optional(),
         defaultProfile: z.string().optional(),
-        stealth: z
-          .object({
-            enabled: z.boolean().optional(),
-            proxy: z
-              .object({
-                url: z.string().optional(),
-                bypassList: z.array(z.string()).optional(),
-              })
-              .strict()
-              .optional(),
-            userAgent: z.string().optional(),
-            geolocation: z
-              .object({
-                latitude: z.number().min(-90).max(90).optional(),
-                longitude: z.number().min(-180).max(180).optional(),
-                city: z.string().optional(),
-              })
-              .strict()
-              .optional(),
-            captcha: z
-              .object({
-                provider: z.union([z.literal("2captcha"), z.literal("capsolver")]).optional(),
-                apiKey: z.string().optional(),
-              })
-              .strict()
-              .optional(),
-          })
-          .strict()
-          .optional(),
+        stealth: BrowserStealthSchema,
         snapshotDefaults: BrowserSnapshotDefaultsSchema,
+        ssrfPolicy: BrowserSsrFPolicySchema,
         extensions: BrowserExtensionSchema,
         profiles: z
           .record(

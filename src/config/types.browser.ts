@@ -85,6 +85,15 @@ export type BrowserConfig = {
   stealth?: BrowserStealthConfig;
   /** Default snapshot options (applied by the browser tool/CLI when unset). */
   snapshotDefaults?: BrowserSnapshotDefaults;
+  /** SSRF policy for browser navigation/open-tab operations. */
+  ssrfPolicy?: {
+    /** If true, permit browser navigation to private/internal networks. Default: false */
+    allowPrivateNetwork?: boolean;
+    /** Explicitly allowed hostnames (exact-match). */
+    allowedHostnames?: string[];
+    /** Hostname allowlist patterns for browser navigation. */
+    hostnameAllowlist?: string[];
+  };
   /** Generic unpacked Chrome extension loading config. */
   extensions?: BrowserExtensionConfig;
   /**
